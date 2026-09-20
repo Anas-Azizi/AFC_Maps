@@ -1,0 +1,22 @@
+{
+  "name": "daleel-mandoub-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "خادم تطبيق دليل المندوب — الشركة العربية للأغذية",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "seed": "node src/seed.js",
+    "tilegen": "node src/tilegen.js"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.16",
+    "express": "^4.21.2",
+    "fast-xml-parser": "^4.5.1",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1"
+  }
+}

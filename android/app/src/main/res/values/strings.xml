@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">دليل المندوب</string>
+    <string name="login_title">تسجيل الدخول</string>
+    <string name="username">اسم المستخدم</string>
+    <string name="password">كلمة المرور</string>
+    <string name="login_button">دخول</string>
+    <string name="error_empty_fields">الرجاء إدخال اسم المستخدم وكلمة المرور</string>
+    <string name="error_network">تعذر الاتصال بالخادم، تحقق من الاتصال بالشبكة وعنوان الخادم</string>
+    <string name="error_unknown">حدث خطأ غير متوقع</string>
+    <string name="session_expired">انتهت الجلسة، الرجاء تسجيل الدخول من جديد</string>
+    <string name="search_hint">ابحث عن محل…</string>
+    <string name="all_regions">كل المناطق</string>
+    <string name="sync">تحديث</string>
+    <string name="syncing">جارٍ التحديث…</string>
+    <string name="sync_success">تم التحديث بنجاح (الإصدار %1$d)</string>
+    <string name="sync_failed">فشل التحديث: %1$s</string>
+    <string name="my_location">موقعي</string>
+    <string name="menu">القائمة</string>
+    <string name="logout">تسجيل الخروج</string>
+    <string name="server_settings">عنوان الخادم</string>
+    <string name="server_settings_hint">مثال: http://192.168.1.10:3000</string>
+    <string name="save">حفظ</string>
+    <string name="cancel">إلغاء</string>
+    <string name="owner_name">صاحب المحل</string>
+    <string name="phone">الهاتف</string>
+    <string name="region">المنطقة</string>
+    <string name="notes">ملاحظات</string>
+    <string name="call">اتصال</string>
+    <string name="no_region">بدون منطقة</string>
+    <string name="location_permission_denied">لم يتم منح إذن الموقع</string>
+    <string name="user_welcome">مرحباً، %1$s</string>
+    <string name="stores_count">عدد المحلات: %1$d</string>
+    <string name="offline_maps_download">تنزيل الخرائط أوفلاين</string>
+    <string name="offline_maps_installed">حزمة الخرائط مثبتة</string>
+    <string name="offline_maps_size_mb">حجم الحزمة: %1$.1f MB</string>
+    <string name="offline_maps_confirm">حجم الحزمة %1$.1f MB. هل تريد تنزيلها الآن؟</string>
+    <string name="offline_maps_unavailable">حزمة الخرائط غير متوفرة على الخادم بعد</string>
+    <string name="offline_maps_downloading">جارٍ تنزيل حزمة الخرائط…</string>
+    <string name="offline_maps_success">تم تثبيت حزمة الخرائط — تعمل الخريطة الآن دون اتصال</string>
+    <string name="offline_maps_failed">فشل تنزيل الخرائط: %1$s</string>
+    <string name="offline_maps_redownload">إعادة التنزيل</string>
+    <string name="offline_maps_delete">حذف الحزمة</string>
+    <string name="offline_maps_deleted">تم حذف حزمة الخرائط</string>
+    <string name="download">تنزيل</string>
+</resources>

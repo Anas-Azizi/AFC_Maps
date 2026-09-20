@@ -1,0 +1,13 @@
+node_modules/
+*.sqlite
+*.sqlite-journal
+dist/
+.env
+.tools/
+
+# Android
+.gradle/
+build/
+local.properties
+*.apk
+*.aab
