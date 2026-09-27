@@ -9,7 +9,9 @@
     <string name="error_network">تعذر الاتصال بالخادم، تحقق من الاتصال بالشبكة وعنوان الخادم</string>
     <string name="error_unknown">حدث خطأ غير متوقع</string>
     <string name="session_expired">انتهت الجلسة، الرجاء تسجيل الدخول من جديد</string>
-    <string name="search_hint">ابحث عن محل…</string>
+    <string name="search_hint">ابحث بالاسم أو رقم الهاتف…</string>
+    <string name="sheet_search_hint">فلترة المحلات…</string>
+    <string name="region_stores_title">محلات %1$s (%2$d)</string>
     <string name="all_regions">كل المناطق</string>
     <string name="sync">تحديث</string>
     <string name="syncing">جارٍ التحديث…</string>

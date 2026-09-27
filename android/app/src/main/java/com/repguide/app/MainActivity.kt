@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
+import android.view.inputmethod.InputMethodManager
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.FrameLayout
@@ -23,6 +24,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.preference.PreferenceManager
+import androidx.recyclerview.widget.LinearLayoutManager
 import com.repguide.app.api.ApiClient
 import com.repguide.app.data.RegionEntity
 import com.repguide.app.data.StoreEntity
@@ -73,6 +75,10 @@ class MainActivity : AppCompatActivity() {
             t = t.replace('ى', 'ي')
             return t
         }
+
+        fun digitsOnly(s: String?): String = s.orEmpty().filter { it.isDigit() }
+
+        private const val MAX_SUGGESTIONS = 10
     }
 
     private lateinit var binding: ActivityMainBinding
@@ -88,6 +94,7 @@ class MainActivity : AppCompatActivity() {
     private var stores: List<StoreEntity> = emptyList()
     private var selectedRegionId: Int? = null
     private var renderedRegions: List<RegionEntity>? = null
+    private lateinit var suggestionAdapter: StoreListAdapter
 
     private val locationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -117,17 +124,30 @@ class MainActivity : AppCompatActivity() {
         binding.statusText.text =
             getString(R.string.user_welcome, Prefs.userName(this).orEmpty())
 
+        suggestionAdapter = StoreListAdapter { store -> onStoreChosen(store) }
+        binding.searchResults.layoutManager = LinearLayoutManager(this)
+        binding.searchResults.adapter = suggestionAdapter
+
         binding.searchInput.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-            override fun afterTextChanged(s: Editable?) = applyFilters()
+            override fun afterTextChanged(s: Editable?) {
+                applyFilters()
+                updateSuggestions()
+            }
         })
 
         binding.regionSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            private var previousRegionId: Int? = null
+
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 selectedRegionId = if (position <= 0) null else regions.getOrNull(position - 1)?.id
                 applyFilters()
-                selectedRegionId?.let { zoomToRegion(it) }
+                selectedRegionId?.let { regionId ->
+                    zoomToRegion(regionId)
+                    if (regionId != previousRegionId) showRegionStores(regionId)
+                }
+                previousRegionId = selectedRegionId
             }
 
             override fun onNothingSelected(parent: AdapterView<*>?) {}
@@ -289,6 +309,81 @@ class MainActivity : AppCompatActivity() {
             binding.map.zoomToBoundingBox(
                 BoundingBox(maxLat, maxLng, minLat, minLng), false, 100
             )
+        }
+    }
+
+    private fun updateSuggestions() {
+        val raw = binding.searchInput.text?.toString().orEmpty().trim()
+        if (raw.isEmpty()) {
+            hideSuggestions()
+            return
+        }
+        val query = normalizeArabic(raw)
+        val digits = digitsOnly(raw)
+        val startsWith = mutableListOf<StoreEntity>()
+        val contains = mutableListOf<StoreEntity>()
+        for (store in stores) {
+            val name = normalizeArabic(store.name)
+            val nameMatch = name.contains(query)
+            val phoneMatch = digits.length >= 2 && digitsOnly(store.phone).contains(digits)
+            if (!nameMatch && !phoneMatch) continue
+            if (name.startsWith(query)) startsWith.add(store) else contains.add(store)
+            if (startsWith.size + contains.size >= MAX_SUGGESTIONS * 3) break
+        }
+        val matches = (startsWith + contains).take(MAX_SUGGESTIONS)
+        if (matches.isEmpty()) {
+            hideSuggestions()
+            return
+        }
+        suggestionAdapter.submitList(
+            matches.map { StoreListItem(it, regionNameOf(it)) }
+        )
+        binding.searchResults.visibility = View.VISIBLE
+    }
+
+    private fun hideSuggestions() {
+        binding.searchResults.visibility = View.GONE
+        suggestionAdapter.submitList(emptyList())
+    }
+
+    private fun regionNameOf(store: StoreEntity): String =
+        store.regionId?.let { regionsById[it]?.name } ?: getString(R.string.no_region)
+
+    private fun onStoreChosen(store: StoreEntity) {
+        hideSuggestions()
+        hideKeyboard()
+        zoomToStore(store)
+        StoreDetailSheet.show(supportFragmentManager, store, regionNameOf(store))
+    }
+
+    private fun zoomToStore(store: StoreEntity) {
+        val point = GeoPoint(store.lat, store.lng)
+        binding.map.controller.setZoom(17.0)
+        binding.map.controller.animateTo(point)
+    }
+
+    private fun hideKeyboard() {
+        val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.hideSoftInputFromWindow(binding.searchInput.windowToken, 0)
+        binding.searchInput.clearFocus()
+    }
+
+    private fun showRegionStores(regionId: Int) {
+        val region = regionsById[regionId] ?: return
+        val regionStores = stores
+            .filter { it.regionId == regionId }
+            .sortedBy { normalizeArabic(it.name) }
+        if (regionStores.isEmpty()) return
+        val items = regionStores.map {
+            StoreListItem(it, it.ownerName?.takeIf { o -> o.isNotBlank() } ?: region.name)
+        }
+        RegionStoresSheet.show(
+            supportFragmentManager,
+            getString(R.string.region_stores_title, region.name, regionStores.size),
+            items
+        ) { store ->
+            zoomToStore(store)
+            StoreDetailSheet.show(supportFragmentManager, store, region.name)
         }
     }
 
