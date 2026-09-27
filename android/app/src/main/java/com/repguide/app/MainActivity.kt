@@ -87,7 +87,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var myLocationOverlay: MyLocationNewOverlay
     private val regionOverlay = FolderOverlay()
     private val labelOverlay = FolderOverlay()
-    private val storeOverlay = FolderOverlay()
+    private lateinit var storeOverlay: StoresOverlay
 
     private var regions: List<RegionEntity> = emptyList()
     private var regionsById: Map<Int, RegionEntity> = emptyMap()
@@ -114,6 +114,9 @@ class MainActivity : AppCompatActivity() {
         binding.map.controller.setZoom(12.0)
         binding.map.controller.setCenter(ALEPPO)
         setupTileProvider()
+        storeOverlay = StoresOverlay(binding.map) { store ->
+            StoreDetailSheet.show(supportFragmentManager, store, regionNameOf(store))
+        }
         binding.map.overlays.add(regionOverlay)
         binding.map.overlays.add(storeOverlay)
         binding.map.overlays.add(labelOverlay)
@@ -272,22 +275,7 @@ class MainActivity : AppCompatActivity() {
             (selectedRegionId == null || store.regionId == selectedRegionId) &&
                     (query.isEmpty() || normalizeArabic(store.name).contains(query))
         }
-        storeOverlay.items.clear()
-        for (store in filtered) {
-            val marker = Marker(binding.map)
-            marker.position = GeoPoint(store.lat, store.lng)
-            marker.title = store.name
-            marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-            marker.setOnMarkerClickListener { _, _ ->
-                StoreDetailSheet.show(
-                    supportFragmentManager,
-                    store,
-                    store.regionId?.let { regionsById[it]?.name }
-                )
-                true
-            }
-            storeOverlay.add(marker)
-        }
+        storeOverlay.stores = filtered
         binding.map.invalidate()
     }
 
