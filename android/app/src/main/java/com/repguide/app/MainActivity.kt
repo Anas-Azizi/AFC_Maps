@@ -77,8 +77,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         fun digitsOnly(s: String?): String = s.orEmpty().filter { it.isDigit() }
-
-        private const val MAX_SUGGESTIONS = 10
     }
 
     private lateinit var binding: ActivityMainBinding
@@ -316,9 +314,8 @@ class MainActivity : AppCompatActivity() {
             val phoneMatch = digits.length >= 2 && digitsOnly(store.phone).contains(digits)
             if (!nameMatch && !phoneMatch) continue
             if (name.startsWith(query)) startsWith.add(store) else contains.add(store)
-            if (startsWith.size + contains.size >= MAX_SUGGESTIONS * 3) break
         }
-        val matches = (startsWith + contains).take(MAX_SUGGESTIONS)
+        val matches = startsWith + contains
         if (matches.isEmpty()) {
             hideSuggestions()
             return
@@ -340,8 +337,14 @@ class MainActivity : AppCompatActivity() {
     private fun onStoreChosen(store: StoreEntity) {
         hideSuggestions()
         hideKeyboard()
-        zoomToStore(store)
+        highlightAndZoomTo(store)
         StoreDetailSheet.show(supportFragmentManager, store, regionNameOf(store))
+    }
+
+    private fun highlightAndZoomTo(store: StoreEntity) {
+        storeOverlay.highlightedId = store.id
+        zoomToStore(store)
+        binding.map.invalidate()
     }
 
     private fun zoomToStore(store: StoreEntity) {
@@ -370,7 +373,7 @@ class MainActivity : AppCompatActivity() {
             getString(R.string.region_stores_title, region.name, regionStores.size),
             items
         ) { store ->
-            zoomToStore(store)
+            highlightAndZoomTo(store)
             StoreDetailSheet.show(supportFragmentManager, store, region.name)
         }
     }
@@ -386,6 +389,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun showMenu() {
         val popup = PopupMenu(this, binding.menuButton)
+        popup.menu.add(getString(R.string.new_store))
         popup.menu.add(getString(R.string.sync))
         popup.menu.add(getString(R.string.server_settings))
         popup.menu.add(
@@ -397,6 +401,7 @@ class MainActivity : AppCompatActivity() {
         popup.menu.add(getString(R.string.logout))
         popup.setOnMenuItemClickListener { item ->
             when (item.title.toString()) {
+                getString(R.string.new_store) -> showNewStoreDialog()
                 getString(R.string.sync) -> vm.sync()
                 getString(R.string.server_settings) -> showServerDialog()
                 getString(R.string.logout) -> logout(showMessage = false)
@@ -406,6 +411,37 @@ class MainActivity : AppCompatActivity() {
             true
         }
         popup.show()
+    }
+
+    private fun showNewStoreDialog() {
+        val location = myLocationOverlay.myLocation
+        if (location == null) {
+            enableMyLocation()
+            Toast.makeText(this, R.string.new_store_no_location, Toast.LENGTH_LONG).show()
+            return
+        }
+        val input = android.widget.EditText(this).apply {
+            hint = getString(R.string.new_store_name_hint)
+        }
+        val pad = (24 * resources.displayMetrics.density).toInt()
+        val container = FrameLayout(this).apply {
+            setPadding(pad, pad / 2, pad, 0)
+            addView(input)
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.new_store_title)
+            .setMessage(getString(R.string.new_store_coords, location.latitude, location.longitude))
+            .setView(container)
+            .setPositiveButton(R.string.save) { _, _ ->
+                val name = input.text?.toString()?.trim().orEmpty()
+                if (name.isEmpty()) {
+                    Toast.makeText(this, R.string.new_store_name_required, Toast.LENGTH_LONG).show()
+                    return@setPositiveButton
+                }
+                vm.submitStore(name, location.latitude, location.longitude)
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
     }
 
     private fun offlinePackageFile() =

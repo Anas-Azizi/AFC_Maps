@@ -161,6 +161,27 @@ adminRouter.delete('/stores/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// ---------- المحلات المسجلة ميدانياً ----------
+
+adminRouter.get('/submissions', (req, res) => {
+  const archived = req.query.archived === '1' ? 1 : 0;
+  const rows = db
+    .prepare(`SELECT s.id, s.store_name AS name, s.lat, s.lng, s.created_at AS createdAt,
+              u.name AS userName
+              FROM store_submissions s JOIN users u ON u.id = s.user_id
+              WHERE s.archived = ? ORDER BY s.created_at DESC`)
+    .all(archived);
+  res.json(rows);
+});
+
+adminRouter.post('/submissions/:id/archive', (req, res) => {
+  const id = Number(req.params.id);
+  const archived = req.body?.archived ? 1 : 0;
+  const info = db.prepare('UPDATE store_submissions SET archived = ? WHERE id = ?').run(archived, id);
+  if (!info.changes) return res.status(404).json({ error: 'السجل غير موجود' });
+  res.json({ ok: true });
+});
+
 // ---------- استيراد KMZ ----------
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 30 * 1024 * 1024 } });

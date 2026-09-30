@@ -27,6 +27,9 @@ class StoresOverlay(
 
     var stores: List<StoreEntity> = emptyList()
 
+    /** معرف المحل المختار حالياً — يُرسم حول دبوسه حلقة مميزة */
+    var highlightedId: Int? = null
+
     /** الحد الأدنى لمستوى التكبير لإظهار النصوص (الدبابيس تظهر دائماً) */
     var minLabelZoom = 13.5
 
@@ -55,6 +58,11 @@ class StoresOverlay(
     private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.argb(190, 255, 255, 255)
         style = Paint.Style.FILL
+    }
+    private val highlightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#1E88E5")
+        style = Paint.Style.STROKE
+        strokeWidth = 3f * mapView.context.resources.displayMetrics.density
     }
 
     private val tmpPoint = Point()
@@ -93,6 +101,14 @@ class StoresOverlay(
                 tmpPoint.y - pinSize.toFloat(),
                 null
             )
+            if (store.id == highlightedId) {
+                canvas.drawCircle(
+                    tmpPoint.x.toFloat(),
+                    tmpPoint.y - pinSize / 2f,
+                    pinSize * 0.75f,
+                    highlightPaint
+                )
+            }
             if (!showLabels) continue
 
             val label = labelOf(store)

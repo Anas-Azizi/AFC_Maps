@@ -42,4 +42,13 @@ interface DataDao {
         clearStores()
         clearRegions()
     }
+
+    @Insert
+    suspend fun insertPendingSubmission(submission: PendingSubmissionEntity)
+
+    @Query("SELECT * FROM pending_submissions ORDER BY createdAt")
+    suspend fun pendingSubmissions(): List<PendingSubmissionEntity>
+
+    @Query("DELETE FROM pending_submissions WHERE id = :id")
+    suspend fun deletePendingSubmission(id: Int)
 }

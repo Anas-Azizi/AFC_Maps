@@ -74,4 +74,7 @@ export const api = {
     return request('/api/admin/import/kmz', { method: 'POST', formData: fd });
   },
   confirmImport: (importId, mode) => request('/api/admin/import/confirm', { method: 'POST', body: { importId, mode } }),
+
+  listSubmissions: (archived = false) => request(`/api/admin/submissions${archived ? '?archived=1' : ''}`),
+  setSubmissionArchived: (id, archived) => request(`/api/admin/submissions/${id}/archive`, { method: 'POST', body: { archived } }),
 };

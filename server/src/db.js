@@ -40,6 +40,16 @@ CREATE TABLE IF NOT EXISTS stores (
 
 CREATE INDEX IF NOT EXISTS idx_stores_region ON stores(region_id);
 
+CREATE TABLE IF NOT EXISTS store_submissions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  store_name TEXT NOT NULL,
+  lat REAL NOT NULL,
+  lng REAL NOT NULL,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  archived INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value TEXT

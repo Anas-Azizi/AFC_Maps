@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">دليل المندوب</string>
+    <string name="app_name">دليل مندوب الشركة العربية للأغذية</string>
     <string name="login_title">تسجيل الدخول</string>
     <string name="username">اسم المستخدم</string>
     <string name="password">كلمة المرور</string>
@@ -45,4 +45,12 @@
     <string name="offline_maps_delete">حذف الحزمة</string>
     <string name="offline_maps_deleted">تم حذف حزمة الخرائط</string>
     <string name="download">تنزيل</string>
+    <string name="new_store">تسجيل محل جديد</string>
+    <string name="new_store_title">تسجيل محل جديد</string>
+    <string name="new_store_name_hint">اسم المحل</string>
+    <string name="new_store_name_required">اسم المحل مطلوب</string>
+    <string name="new_store_coords">الموقع الحالي: %1$.5f، %2$.5f</string>
+    <string name="new_store_no_location">تعذر تحديد الموقع، تأكد من تفعيل GPS وحاول مجدداً بعد لحظات</string>
+    <string name="new_store_sent">تم إرسال المحل الجديد إلى الإدارة</string>
+    <string name="new_store_queued">لا يوجد اتصال — حُفظ المحل محلياً وسيُرسل تلقائياً عند توفر الاتصال</string>
 </resources>

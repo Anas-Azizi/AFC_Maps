@@ -24,3 +24,12 @@ data class StoreEntity(
     val regionId: Int?,
     val notes: String?
 )
+
+@Entity(tableName = "pending_submissions")
+data class PendingSubmissionEntity(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val name: String,
+    val lat: Double,
+    val lng: Double,
+    val createdAt: Long
+)

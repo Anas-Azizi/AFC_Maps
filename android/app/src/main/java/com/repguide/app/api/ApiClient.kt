@@ -65,6 +65,28 @@ object ApiClient {
         )
     }
 
+    fun submitStore(
+        serverUrl: String,
+        token: String,
+        name: String,
+        lat: Double,
+        lng: Double,
+        unknownError: String
+    ) {
+        val payload = JSONObject()
+            .put("name", name)
+            .put("lat", lat)
+            .put("lng", lng)
+            .toString()
+            .toRequestBody("application/json; charset=utf-8".toMediaType())
+        val request = Request.Builder()
+            .url("$serverUrl/api/data/submissions")
+            .header("Authorization", "Bearer $token")
+            .post(payload)
+            .build()
+        execute(request, unknownError)
+    }
+
     fun fetchSnapshot(serverUrl: String, token: String, unknownError: String): Snapshot {
         val request = Request.Builder()
             .url("$serverUrl/api/data/snapshot")
