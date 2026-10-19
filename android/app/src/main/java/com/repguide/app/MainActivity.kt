@@ -341,6 +341,7 @@ class MainActivity : AppCompatActivity() {
         hideKeyboard()
         // مسح نص البحث لتعود كل المحلات للظهور — الاختيار للانتقال فقط وليس فلترة
         binding.searchInput.text?.clear()
+        binding.regionSpinner.setSelection(0)
         highlightAndZoomTo(store)
         StoreDetailSheet.show(supportFragmentManager, store, regionNameOf(store), ::onStoreAction)
     }
@@ -521,9 +522,10 @@ class MainActivity : AppCompatActivity() {
                 DatabaseFileArchive.getDatabaseFileArchive(archive)
             }.getOrNull()
             val valid = dbArchive?.let {
-                runCatching { it.tileSources.contains(tileSource.name()) }.getOrDefault(false)
+                runCatching { it.tileSources.isNotEmpty() }.getOrDefault(false)
             } ?: false
             if (valid && dbArchive != null) {
+                dbArchive.setIgnoreTileSource(true)
                 val receiver = SimpleRegisterReceiver(this)
                 val archiveProvider = MapTileFileArchiveProvider(receiver, tileSource, arrayOf(dbArchive))
                 val downloader = MapTileDownloader(tileSource, TileWriter())
@@ -623,7 +625,7 @@ class MainActivity : AppCompatActivity() {
                     runCatching { DatabaseFileArchive.getDatabaseFileArchive(tmp) }.getOrNull()
                 }
                 val valid = probe?.let {
-                    runCatching { it.tileSources.contains(TileSourceFactory.MAPNIK.name()) }
+                    runCatching { it.tileSources.isNotEmpty() }
                         .getOrDefault(false)
                 } ?: false
                 runCatching { probe?.close() }

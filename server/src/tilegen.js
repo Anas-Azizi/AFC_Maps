@@ -191,7 +191,7 @@ async function main() {
       })
     );
     for (const { t, blob } of results) {
-      if (blob) insert.run(t.key, 'MAPNIK', blob, expires);
+      if (blob) insert.run(t.key, 'Mapnik', blob, expires);
       else failed++;
       done++;
     }
