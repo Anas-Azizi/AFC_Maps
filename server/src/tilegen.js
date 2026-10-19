@@ -4,7 +4,7 @@
  * التشغيل: npm run tilegen
  *
  * - يحسب نطاق البيانات (bbox) من قاعدة البيانات: المحلات + مضلعات المناطق + هامش صغير.
- * - المستويات 10..14 لكامل النطاق، والمستوى 15 فقط داخل مدينة حلب.
+ * - المستويات 10..14 لكامل النطاق، والمستويات 15..17 فقط داخل مدينة حلب.
  * - يحترم سياسة استخدام بلاطات OSM: User-Agent واضح، طلبان متزامنان كحد أقصى،
  *   300ms بين الطلبات، إعادة محاولة مع backoff، واستئناف (تخطي البلاطات الموجودة).
  */
@@ -22,9 +22,9 @@ const USER_AGENT = 'RepguideApp/0.1 (company internal tool)';
 const TILE_URL = (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
 const MAX_TILES = 15000;
 const FULL_ZOOMS = [10, 11, 12, 13, 14];
-const CITY_ZOOM = 15;
+const CITY_ZOOMS = [15, 16, 17];
 const MARGIN = 0.02; // درجات حول نطاق البيانات
-// نطاق مدينة حلب للمستوى 15
+// نطاق مدينة حلب للمستويات العالية
 const CITY_BBOX = [36.13, 37.05, 36.30, 37.28]; // [minLat, minLng, maxLat, maxLng]
 
 const CONCURRENCY = 2;
@@ -113,11 +113,11 @@ async function main() {
 
   // بناء خطة المستويات مع تقليل تلقائي إن تجاوز التقدير الحد الأقصى
   let fullZooms = [...FULL_ZOOMS];
-  let cityZoom = CITY_ZOOM;
+  let cityZooms = [...CITY_ZOOMS];
   let plan;
   for (;;) {
     plan = fullZooms.map((z) => tileRange(bbox, z));
-    if (cityZoom) plan.push(tileRange(CITY_BBOX, cityZoom));
+    for (const z of cityZooms) plan.push(tileRange(CITY_BBOX, z));
     const total = plan.reduce((s, r) => s + r.count, 0);
     console.log(
       'التقدير: ' +
@@ -125,9 +125,9 @@ async function main() {
         ` = ${total} بلاطة`
     );
     if (total <= MAX_TILES) break;
-    if (cityZoom) {
-      cityZoom = 0;
-      console.log(`التقدير ${total} يتجاوز ${MAX_TILES} — إسقاط مستوى المدينة z${CITY_ZOOM}`);
+    if (cityZooms.length) {
+      const dropped = cityZooms.pop();
+      console.log(`التقدير ${total} يتجاوز ${MAX_TILES} — إسقاط مستوى المدينة z${dropped}`);
     } else if (fullZooms.length > 1) {
       const dropped = fullZooms.pop();
       console.log(`التقدير ${total} يتجاوز ${MAX_TILES} — إسقاط المستوى z${dropped}`);

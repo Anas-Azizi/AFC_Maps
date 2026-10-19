@@ -111,6 +111,9 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         binding.map.setMultiTouchControls(true)
+        // حزمة الأوفلاين تغطي z10..z17 — تقييد الزوم يمنع اختفاء الخريطة خارج التغطية
+        binding.map.minZoomLevel = 10.0
+        binding.map.maxZoomLevel = 17.0
         binding.map.controller.setZoom(12.0)
         binding.map.controller.setCenter(ALEPPO)
         setupTileProvider()
