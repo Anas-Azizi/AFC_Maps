@@ -87,6 +87,30 @@ object ApiClient {
         execute(request, unknownError)
     }
 
+    fun submitStoreUpdate(
+        serverUrl: String,
+        token: String,
+        storeId: Int?,
+        storeName: String,
+        lat: Double?,
+        lng: Double?,
+        note: String?,
+        unknownError: String
+    ) {
+        val payload = JSONObject()
+            .put("storeName", storeName)
+        storeId?.let { payload.put("storeId", it) }
+        lat?.let { payload.put("lat", it) }
+        lng?.let { payload.put("lng", it) }
+        note?.let { payload.put("note", it) }
+        val request = Request.Builder()
+            .url("$serverUrl/api/data/updates")
+            .header("Authorization", "Bearer $token")
+            .post(payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
+            .build()
+        execute(request, unknownError)
+    }
+
     fun fetchSnapshot(serverUrl: String, token: String, unknownError: String): Snapshot {
         val request = Request.Builder()
             .url("$serverUrl/api/data/snapshot")

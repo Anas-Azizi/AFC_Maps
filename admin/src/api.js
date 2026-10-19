@@ -77,4 +77,7 @@ export const api = {
 
   listSubmissions: (archived = false) => request(`/api/admin/submissions${archived ? '?archived=1' : ''}`),
   setSubmissionArchived: (id, archived) => request(`/api/admin/submissions/${id}/archive`, { method: 'POST', body: { archived } }),
+
+  listUpdates: (archived = false) => request(`/api/admin/updates${archived ? '?archived=1' : ''}`),
+  setUpdateArchived: (id, archived) => request(`/api/admin/updates/${id}/archive`, { method: 'POST', body: { archived } }),
 };

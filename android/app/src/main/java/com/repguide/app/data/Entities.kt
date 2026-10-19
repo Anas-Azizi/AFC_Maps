@@ -33,3 +33,14 @@ data class PendingSubmissionEntity(
     val lng: Double,
     val createdAt: Long
 )
+
+@Entity(tableName = "pending_updates")
+data class PendingUpdateEntity(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val storeId: Int?,
+    val storeName: String,
+    val lat: Double?,
+    val lng: Double?,
+    val note: String?,
+    val createdAt: Long
+)

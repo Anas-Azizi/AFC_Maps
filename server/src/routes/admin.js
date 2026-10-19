@@ -182,6 +182,28 @@ adminRouter.post('/submissions/:id/archive', (req, res) => {
   res.json({ ok: true });
 });
 
+// ---------- تحديثات المحلات المقترحة ----------
+
+adminRouter.get('/updates', (req, res) => {
+  const archived = req.query.archived === '1' ? 1 : 0;
+  const rows = db
+    .prepare(`SELECT s.id, s.store_id AS storeId, s.store_name AS storeName,
+              s.new_lat AS newLat, s.new_lng AS newLng, s.note, s.created_at AS createdAt,
+              u.name AS userName
+              FROM store_updates s JOIN users u ON u.id = s.user_id
+              WHERE s.archived = ? ORDER BY s.created_at DESC`)
+    .all(archived);
+  res.json(rows);
+});
+
+adminRouter.post('/updates/:id/archive', (req, res) => {
+  const id = Number(req.params.id);
+  const archived = req.body?.archived ? 1 : 0;
+  const info = db.prepare('UPDATE store_updates SET archived = ? WHERE id = ?').run(archived, id);
+  if (!info.changes) return res.status(404).json({ error: 'السجل غير موجود' });
+  res.json({ ok: true });
+});
+
 // ---------- استيراد KMZ ----------
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 30 * 1024 * 1024 } });

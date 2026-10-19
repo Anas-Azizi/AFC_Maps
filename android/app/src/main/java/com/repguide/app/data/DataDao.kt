@@ -51,4 +51,13 @@ interface DataDao {
 
     @Query("DELETE FROM pending_submissions WHERE id = :id")
     suspend fun deletePendingSubmission(id: Int)
+
+    @Insert
+    suspend fun insertPendingUpdate(update: PendingUpdateEntity)
+
+    @Query("SELECT * FROM pending_updates ORDER BY createdAt")
+    suspend fun pendingUpdates(): List<PendingUpdateEntity>
+
+    @Query("DELETE FROM pending_updates WHERE id = :id")
+    suspend fun deletePendingUpdate(id: Int)
 }

@@ -50,6 +50,18 @@ CREATE TABLE IF NOT EXISTS store_submissions (
   archived INTEGER NOT NULL DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS store_updates (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  store_id INTEGER,
+  store_name TEXT NOT NULL,
+  new_lat REAL,
+  new_lng REAL,
+  note TEXT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  archived INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value TEXT

@@ -21,9 +21,25 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
     }
 }
 
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """CREATE TABLE IF NOT EXISTS pending_updates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                storeId INTEGER,
+                storeName TEXT NOT NULL,
+                lat REAL,
+                lng REAL,
+                note TEXT,
+                createdAt INTEGER NOT NULL
+            )"""
+        )
+    }
+}
+
 @Database(
-    entities = [RegionEntity::class, StoreEntity::class, PendingSubmissionEntity::class],
-    version = 2,
+    entities = [RegionEntity::class, StoreEntity::class, PendingSubmissionEntity::class, PendingUpdateEntity::class],
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -39,7 +55,7 @@ abstract class AppDatabase : RoomDatabase() {
                     ctx.applicationContext,
                     AppDatabase::class.java,
                     "rep_guide.db"
-                ).addMigrations(MIGRATION_1_2).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
             }
     }
 }

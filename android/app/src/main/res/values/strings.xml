@@ -41,6 +41,7 @@
     <string name="offline_maps_downloading">جارٍ تنزيل حزمة الخرائط…</string>
     <string name="offline_maps_success">تم تثبيت حزمة الخرائط — تعمل الخريطة الآن دون اتصال</string>
     <string name="offline_maps_failed">فشل تنزيل الخرائط: %1$s</string>
+    <string name="offline_maps_invalid">الملف المُنزَّل غير صالح، حاول مرة أخرى</string>
     <string name="offline_maps_redownload">إعادة التنزيل</string>
     <string name="offline_maps_delete">حذف الحزمة</string>
     <string name="offline_maps_deleted">تم حذف حزمة الخرائط</string>
@@ -53,4 +54,14 @@
     <string name="new_store_no_location">تعذر تحديد الموقع، تأكد من تفعيل GPS وحاول مجدداً بعد لحظات</string>
     <string name="new_store_sent">تم إرسال المحل الجديد إلى الإدارة</string>
     <string name="new_store_queued">لا يوجد اتصال — حُفظ المحل محلياً وسيُرسل تلقائياً عند توفر الاتصال</string>
+    <string name="update_location">تحديث موقع الزبون</string>
+    <string name="add_note">إضافة ملاحظة</string>
+    <string name="update_location_with_note">تحديث الموقع مع ملاحظة</string>
+    <string name="confirm_update_location">سيتم إرسال موقعك الحالي (%2$.5f، %3$.5f) كموقع مُقترح للمحل «%1$s»</string>
+    <string name="note_dialog_title">ملاحظة عن «%1$s»</string>
+    <string name="note_hint">اكتب الملاحظة…</string>
+    <string name="note_required">الملاحظة مطلوبة</string>
+    <string name="send">إرسال</string>
+    <string name="update_sent">تم إرسال التحديث إلى الإدارة</string>
+    <string name="update_queued">لا يوجد اتصال — حُفظ التحديث محلياً وسيُرسل تلقائياً عند توفر الاتصال</string>
 </resources>

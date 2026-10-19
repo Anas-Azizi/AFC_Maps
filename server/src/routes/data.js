@@ -26,3 +26,17 @@ dataRouter.post('/submissions', authRequired, (req, res) => {
     .run(name.trim(), lat, lng, req.user.id);
   res.status(201).json({ id: info.lastInsertRowid });
 });
+
+// تحديث مقترح على محل موجود (موقع جديد و/أو ملاحظة) من المندوب
+dataRouter.post('/updates', authRequired, (req, res) => {
+  const { storeId, storeName, lat, lng, note } = req.body || {};
+  const hasLocation = typeof lat === 'number' && typeof lng === 'number';
+  const hasNote = typeof note === 'string' && note.trim().length > 0;
+  if (!storeName || (!hasLocation && !hasNote)) {
+    return res.status(400).json({ error: 'اسم المحل مع موقع جديد أو ملاحظة مطلوبة' });
+  }
+  const info = db
+    .prepare('INSERT INTO store_updates (store_id, store_name, new_lat, new_lng, note, user_id) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(storeId ?? null, storeName.trim(), hasLocation ? lat : null, hasLocation ? lng : null, hasNote ? note.trim() : null, req.user.id);
+  res.status(201).json({ id: info.lastInsertRowid });
+});

@@ -104,6 +104,8 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         Configuration.getInstance().load(this, PreferenceManager.getDefaultSharedPreferences(this))
         Configuration.getInstance().userAgentValue = packageName
+        // مسار خاص بالتطبيق — يتجنب مشاكل صلاحيات التخزين المشترك في أندرويد الحديث
+        Configuration.getInstance().osmdroidBasePath = File(filesDir, "osmdroid").apply { mkdirs() }
 
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -113,7 +115,7 @@ class MainActivity : AppCompatActivity() {
         binding.map.controller.setCenter(ALEPPO)
         setupTileProvider()
         storeOverlay = StoresOverlay(binding.map) { store ->
-            StoreDetailSheet.show(supportFragmentManager, store, regionNameOf(store))
+            StoreDetailSheet.show(supportFragmentManager, store, regionNameOf(store), ::onStoreAction)
         }
         binding.map.overlays.add(regionOverlay)
         binding.map.overlays.add(storeOverlay)
@@ -337,8 +339,10 @@ class MainActivity : AppCompatActivity() {
     private fun onStoreChosen(store: StoreEntity) {
         hideSuggestions()
         hideKeyboard()
+        // مسح نص البحث لتعود كل المحلات للظهور — الاختيار للانتقال فقط وليس فلترة
+        binding.searchInput.text?.clear()
         highlightAndZoomTo(store)
-        StoreDetailSheet.show(supportFragmentManager, store, regionNameOf(store))
+        StoreDetailSheet.show(supportFragmentManager, store, regionNameOf(store), ::onStoreAction)
     }
 
     private fun highlightAndZoomTo(store: StoreEntity) {
@@ -374,7 +378,7 @@ class MainActivity : AppCompatActivity() {
             items
         ) { store ->
             highlightAndZoomTo(store)
-            StoreDetailSheet.show(supportFragmentManager, store, region.name)
+            StoreDetailSheet.show(supportFragmentManager, store, region.name, ::onStoreAction)
         }
     }
 
@@ -411,6 +415,67 @@ class MainActivity : AppCompatActivity() {
             true
         }
         popup.show()
+    }
+
+    private fun onStoreAction(store: StoreEntity, action: Int) {
+        when (action) {
+            StoreDetailSheet.ACTION_UPDATE_LOCATION -> {
+                val loc = currentLocationOrWarn() ?: return
+                AlertDialog.Builder(this)
+                    .setTitle(R.string.update_location)
+                    .setMessage(
+                        getString(
+                            R.string.confirm_update_location,
+                            store.name,
+                            loc.latitude,
+                            loc.longitude
+                        )
+                    )
+                    .setPositiveButton(R.string.send) { _, _ ->
+                        vm.submitStoreUpdate(store, loc.latitude, loc.longitude, null)
+                    }
+                    .setNegativeButton(R.string.cancel, null)
+                    .show()
+            }
+            StoreDetailSheet.ACTION_ADD_NOTE -> showNoteDialog(store, null)
+            StoreDetailSheet.ACTION_UPDATE_BOTH -> {
+                val loc = currentLocationOrWarn() ?: return
+                showNoteDialog(store, loc)
+            }
+        }
+    }
+
+    private fun currentLocationOrWarn(): GeoPoint? {
+        val loc = myLocationOverlay.myLocation
+        if (loc == null) {
+            enableMyLocation()
+            Toast.makeText(this, R.string.new_store_no_location, Toast.LENGTH_LONG).show()
+        }
+        return loc
+    }
+
+    private fun showNoteDialog(store: StoreEntity, location: GeoPoint?) {
+        val input = android.widget.EditText(this).apply {
+            hint = getString(R.string.note_hint)
+        }
+        val pad = (24 * resources.displayMetrics.density).toInt()
+        val container = FrameLayout(this).apply {
+            setPadding(pad, pad / 2, pad, 0)
+            addView(input)
+        }
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.note_dialog_title, store.name))
+            .setView(container)
+            .setPositiveButton(R.string.send) { _, _ ->
+                val note = input.text?.toString()?.trim().orEmpty()
+                if (note.isEmpty()) {
+                    Toast.makeText(this, R.string.note_required, Toast.LENGTH_LONG).show()
+                    return@setPositiveButton
+                }
+                vm.submitStoreUpdate(store, location?.latitude, location?.longitude, note)
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
     }
 
     private fun showNewStoreDialog() {
@@ -452,9 +517,14 @@ class MainActivity : AppCompatActivity() {
         val tileSource = TileSourceFactory.MAPNIK
         val archive = offlinePackageFile()
         if (archive.exists() && archive.length() > 0) {
-            runCatching {
+            val dbArchive = runCatching {
+                DatabaseFileArchive.getDatabaseFileArchive(archive)
+            }.getOrNull()
+            val valid = dbArchive?.let {
+                runCatching { it.tileSources.contains(tileSource.name()) }.getOrDefault(false)
+            } ?: false
+            if (valid && dbArchive != null) {
                 val receiver = SimpleRegisterReceiver(this)
-                val dbArchive = DatabaseFileArchive.getDatabaseFileArchive(archive)
                 val archiveProvider = MapTileFileArchiveProvider(receiver, tileSource, arrayOf(dbArchive))
                 val downloader = MapTileDownloader(tileSource, TileWriter())
                 binding.map.setTileProvider(
@@ -463,6 +533,9 @@ class MainActivity : AppCompatActivity() {
                 binding.map.invalidate()
                 return
             }
+            // ملف تالف أو غير متوافق — حذفه ليعاد تنزيله
+            runCatching { dbArchive?.close() }
+            archive.delete()
         }
         binding.map.setTileProvider(MapTileProviderBasic(this, tileSource))
         binding.map.invalidate()
@@ -539,13 +612,38 @@ class MainActivity : AppCompatActivity() {
         val tmp = File(dest.parentFile, "offline.sqlite.tmp")
         lifecycleScope.launch {
             try {
+                dest.parentFile?.mkdirs()
                 withContext(Dispatchers.IO) {
                     ApiClient.downloadTilesPackage(
                         serverUrl, token, tmp, getString(R.string.error_unknown)
                     ) { percent -> progressBar.post { progressBar.progress = percent } }
                 }
-                dest.delete()
-                tmp.renameTo(dest)
+                // التحقق من سلامة الحزمة قبل اعتمادها
+                val probe = withContext(Dispatchers.IO) {
+                    runCatching { DatabaseFileArchive.getDatabaseFileArchive(tmp) }.getOrNull()
+                }
+                val valid = probe?.let {
+                    runCatching { it.tileSources.contains(TileSourceFactory.MAPNIK.name()) }
+                        .getOrDefault(false)
+                } ?: false
+                runCatching { probe?.close() }
+                if (!valid) {
+                    tmp.delete()
+                    throw Exception(getString(R.string.offline_maps_invalid))
+                }
+                // استبدال آمن: لا يُحذف الملف القديم قبل نجاح وضع الجديد
+                withContext(Dispatchers.IO) {
+                    val backup = File(dest.parentFile, "offline.sqlite.bak")
+                    backup.delete()
+                    if (dest.exists() && !dest.renameTo(backup)) dest.delete()
+                    if (!tmp.renameTo(dest)) {
+                        tmp.inputStream().use { input ->
+                            dest.outputStream().use { output -> input.copyTo(output) }
+                        }
+                        tmp.delete()
+                    }
+                    backup.delete()
+                }
                 setupTileProvider()
                 Toast.makeText(this@MainActivity, R.string.offline_maps_success, Toast.LENGTH_LONG).show()
             } catch (e: Exception) {

@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.repguide.app.api.ApiClient
 import com.repguide.app.data.AppDatabase
 import com.repguide.app.data.PendingSubmissionEntity
+import com.repguide.app.data.PendingUpdateEntity
 import com.repguide.app.data.RegionEntity
 import com.repguide.app.data.StoreEntity
 import kotlinx.coroutines.Dispatchers
@@ -148,7 +149,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** إرسال المحلات المعلّقة المحفوظة محلياً — تُستدعى ضمن المزامنة */
+    /** إرسال المحلات والتحديثات المعلّقة المحفوظة محلياً — تُستدعى ضمن المزامنة */
     private suspend fun flushPendingSubmissions(ctx: Application, token: String) {
         for (p in dao.pendingSubmissions()) {
             try {
@@ -164,6 +165,64 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: Exception) {
                 // لا اتصال — تبقى معلّقة وتُرسل في المزامنة القادمة
                 return
+            }
+        }
+        for (u in dao.pendingUpdates()) {
+            try {
+                ApiClient.submitStoreUpdate(
+                    Prefs.serverUrl(ctx), token, u.storeId, u.storeName, u.lat, u.lng, u.note,
+                    ctx.getString(R.string.error_unknown)
+                )
+                dao.deletePendingUpdate(u.id)
+            } catch (e: ApiClient.ApiException) {
+                if (e.status == 401) throw e
+                if (e.status in 400..499) dao.deletePendingUpdate(u.id)
+            } catch (e: Exception) {
+                return
+            }
+        }
+    }
+
+    /** تحديث مقترح على محل موجود: موقع جديد و/أو ملاحظة — فوري أو محلي عند غياب الاتصال */
+    fun submitStoreUpdate(store: StoreEntity, lat: Double?, lng: Double?, note: String?) {
+        val ctx = getApplication<Application>()
+        viewModelScope.launch {
+            val entity = PendingUpdateEntity(
+                storeId = store.id, storeName = store.name,
+                lat = lat, lng = lng, note = note,
+                createdAt = System.currentTimeMillis()
+            )
+            val token = Prefs.token(ctx)
+            var queued = false
+            if (token != null) {
+                try {
+                    withContext(Dispatchers.IO) {
+                        ApiClient.submitStoreUpdate(
+                            Prefs.serverUrl(ctx), token, store.id, store.name, lat, lng, note,
+                            ctx.getString(R.string.error_unknown)
+                        )
+                    }
+                } catch (e: ApiClient.ApiException) {
+                    if (e.status == 401) {
+                        _state.update { it.copy(event = Event.Unauthorized) }
+                        return@launch
+                    }
+                    queued = true
+                } catch (e: Exception) {
+                    queued = true
+                }
+            } else {
+                queued = true
+            }
+            if (queued) {
+                withContext(Dispatchers.IO) { dao.insertPendingUpdate(entity) }
+            }
+            _state.update {
+                it.copy(
+                    event = Event.Message(
+                        ctx.getString(if (queued) R.string.update_queued else R.string.update_sent)
+                    )
+                )
             }
         }
     }
