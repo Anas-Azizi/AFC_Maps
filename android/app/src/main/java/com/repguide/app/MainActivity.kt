@@ -114,9 +114,9 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         binding.map.setMultiTouchControls(true)
-        // الحد الأدنى 10 لأن حزمة الأوفلاين تبدأ من z10؛ فوق z17 يعرض التطبيق بلاطات مكبّرة من الحزمة (تقريب) أو حقيقية عند الاتصال
+        // أقصى تكبير مفيد: OSM تقدم بلاطات حقيقية حتى z19، ومن z20 إلى z22 يعرض التطبيق تقريباً مكبّراً من أدنى مستوى متوفر
         binding.map.minZoomLevel = 10.0
-        binding.map.maxZoomLevel = 19.0
+        binding.map.maxZoomLevel = 22.0
         binding.map.controller.setZoom(12.0)
         binding.map.controller.setCenter(ALEPPO)
         setupTileProvider()
