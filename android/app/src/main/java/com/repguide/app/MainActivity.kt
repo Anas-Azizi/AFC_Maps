@@ -38,6 +38,7 @@ import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.MapTileProviderArray
 import org.osmdroid.tileprovider.MapTileProviderBasic
 import org.osmdroid.tileprovider.modules.DatabaseFileArchive
+import org.osmdroid.tileprovider.modules.MapTileApproximater
 import org.osmdroid.tileprovider.modules.MapTileDownloader
 import org.osmdroid.tileprovider.modules.MapTileFileArchiveProvider
 import org.osmdroid.tileprovider.modules.TileWriter
@@ -113,9 +114,9 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         binding.map.setMultiTouchControls(true)
-        // حزمة الأوفلاين تغطي z10..z17 — تقييد الزوم يمنع اختفاء الخريطة خارج التغطية
+        // الحد الأدنى 10 لأن حزمة الأوفلاين تبدأ من z10؛ فوق z17 يعرض التطبيق بلاطات مكبّرة من الحزمة (تقريب) أو حقيقية عند الاتصال
         binding.map.minZoomLevel = 10.0
-        binding.map.maxZoomLevel = 17.0
+        binding.map.maxZoomLevel = 19.0
         binding.map.controller.setZoom(12.0)
         binding.map.controller.setCenter(ALEPPO)
         setupTileProvider()
@@ -592,8 +593,14 @@ class MainActivity : AppCompatActivity() {
                 val receiver = SimpleRegisterReceiver(this)
                 val archiveProvider = MapTileFileArchiveProvider(receiver, tileSource, arrayOf(dbArchive))
                 val downloader = MapTileDownloader(tileSource, TileWriter())
+                // عند طلب بلاطة غير موجودة (مثلاً z18/19 أوفلاين) يُولَّد تقريب مكبّر من بلاطات الحزمة بدل مربع رمادي
+                val approximater = MapTileApproximater()
+                approximater.addProvider(archiveProvider)
                 binding.map.setTileProvider(
-                    MapTileProviderArray(tileSource, receiver, arrayOf(archiveProvider, downloader))
+                    MapTileProviderArray(
+                        tileSource, receiver,
+                        arrayOf(archiveProvider, downloader, approximater)
+                    )
                 )
                 binding.map.invalidate()
                 return
