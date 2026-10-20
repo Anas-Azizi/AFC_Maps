@@ -17,6 +17,7 @@ class StoreDetailSheet : BottomSheetDialogFragment() {
         const val ACTION_UPDATE_LOCATION = 1
         const val ACTION_ADD_NOTE = 2
         const val ACTION_UPDATE_BOTH = 3
+        const val ACTION_DRAW_ROUTE = 4
 
         private const val ARG_ID = "id"
         private const val ARG_NAME = "name"
@@ -82,10 +83,15 @@ class StoreDetailSheet : BottomSheetDialogFragment() {
         val onAction = pendingAction
         val store = pendingStore
         if (onAction == null || store == null) {
+            binding.drawRouteButton.visibility = View.GONE
             binding.updateLocationButton.visibility = View.GONE
             binding.addNoteButton.visibility = View.GONE
             binding.updateBothButton.visibility = View.GONE
         } else {
+            binding.drawRouteButton.setOnClickListener {
+                dismiss()
+                onAction(store, ACTION_DRAW_ROUTE)
+            }
             binding.updateLocationButton.setOnClickListener {
                 dismiss()
                 onAction(store, ACTION_UPDATE_LOCATION)

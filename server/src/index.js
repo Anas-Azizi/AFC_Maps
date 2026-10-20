@@ -6,6 +6,7 @@ import { verifyPassword, signToken, authRequired } from './auth.js';
 import { dataRouter } from './routes/data.js';
 import { adminRouter } from './routes/admin.js';
 import { tilesRouter } from './routes/tiles.js';
+import { routeRouter } from './routes/route.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -30,6 +31,7 @@ app.get('/api/auth/me', authRequired, (req, res) => {
 app.use('/api/data', dataRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/tiles', tilesRouter);
+app.use('/api/route', routeRouter);
 
 // لوحة الإدارة (بعد بنائها)
 const adminDist = path.join(__dirname, '..', '..', 'admin', 'dist');

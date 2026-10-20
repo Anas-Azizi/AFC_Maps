@@ -182,6 +182,37 @@ object ApiClient {
         return TilesInfo(json.optBoolean("available", false), json.optLong("size", 0), bbox, zooms)
     }
 
+    data class Route(
+        val distanceMeters: Double,
+        val durationSeconds: Double,
+        val points: List<DoubleArray> // أزواج [lat, lng]
+    )
+
+    fun fetchRoute(
+        serverUrl: String,
+        token: String,
+        fromLat: Double,
+        fromLng: Double,
+        toLat: Double,
+        toLng: Double,
+        unknownError: String
+    ): Route {
+        val request = Request.Builder()
+            .url("$serverUrl/api/route?from=$fromLng,$fromLat&to=$toLng,$toLat")
+            .header("Authorization", "Bearer $token")
+            .get()
+            .build()
+        val body = execute(request, unknownError)
+        val json = JSONObject(body)
+        val arr = json.getJSONArray("points")
+        val points = ArrayList<DoubleArray>(arr.length())
+        for (i in 0 until arr.length()) {
+            val p = arr.getJSONArray(i)
+            points.add(doubleArrayOf(p.getDouble(1), p.getDouble(0))) // OSM GeoJSON = [lng, lat]
+        }
+        return Route(json.getDouble("distance"), json.getDouble("duration"), points)
+    }
+
     /** يُستدعى من خيط خلفي؛ [onProgress] تُستدعى بنسبة 0..100 عند معرفة الحجم الكلي. */
     fun downloadTilesPackage(
         serverUrl: String,

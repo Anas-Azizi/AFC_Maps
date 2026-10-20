@@ -64,4 +64,9 @@
     <string name="send">إرسال</string>
     <string name="update_sent">تم إرسال التحديث إلى الإدارة</string>
     <string name="update_queued">لا يوجد اتصال — حُفظ التحديث محلياً وسيُرسل تلقائياً عند توفر الاتصال</string>
+    <string name="draw_route">رسم المسار إلى الزبون</string>
+    <string name="route_calculating">جارٍ حساب المسار…</string>
+    <string name="route_summary">المسافة %1$s كم — المدة التقريبية %2$d دقيقة بالسيارة</string>
+    <string name="route_failed">تعذّر حساب المسار: %1$s</string>
+    <string name="clear_route">مسح المسار من الخريطة</string>
 </resources>

@@ -117,10 +117,17 @@
         android:orientation="vertical">
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/drawRouteButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/draw_route" />
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/updateLocationButton"
             style="@style/Widget.Material3.Button.OutlinedButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
             android:text="@string/update_location" />
 
         <com.google.android.material.button.MaterialButton

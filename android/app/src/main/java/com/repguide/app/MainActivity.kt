@@ -48,6 +48,7 @@ import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.overlay.FolderOverlay
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polygon
+import org.osmdroid.views.overlay.Polyline
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 import java.io.File
@@ -92,6 +93,7 @@ class MainActivity : AppCompatActivity() {
     private var stores: List<StoreEntity> = emptyList()
     private var selectedRegionId: Int? = null
     private var renderedRegions: List<RegionEntity>? = null
+    private var routeLine: Polyline? = null
     private lateinit var suggestionAdapter: StoreListAdapter
 
     private val locationPermissionLauncher =
@@ -399,6 +401,7 @@ class MainActivity : AppCompatActivity() {
         val popup = PopupMenu(this, binding.menuButton)
         popup.menu.add(getString(R.string.new_store))
         popup.menu.add(getString(R.string.sync))
+        if (routeLine != null) popup.menu.add(getString(R.string.clear_route))
         popup.menu.add(getString(R.string.server_settings))
         popup.menu.add(
             getString(
@@ -411,6 +414,7 @@ class MainActivity : AppCompatActivity() {
             when (item.title.toString()) {
                 getString(R.string.new_store) -> showNewStoreDialog()
                 getString(R.string.sync) -> vm.sync()
+                getString(R.string.clear_route) -> clearRoute()
                 getString(R.string.server_settings) -> showServerDialog()
                 getString(R.string.logout) -> logout(showMessage = false)
                 getString(R.string.offline_maps_download),
@@ -423,6 +427,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun onStoreAction(store: StoreEntity, action: Int) {
         when (action) {
+            StoreDetailSheet.ACTION_DRAW_ROUTE -> drawRouteTo(store)
             StoreDetailSheet.ACTION_UPDATE_LOCATION -> {
                 val loc = currentLocationOrWarn() ?: return
                 AlertDialog.Builder(this)
@@ -447,6 +452,61 @@ class MainActivity : AppCompatActivity() {
                 showNoteDialog(store, loc)
             }
         }
+    }
+
+    private fun drawRouteTo(store: StoreEntity) {
+        val from = currentLocationOrWarn() ?: return
+        val serverUrl = Prefs.serverUrl(this)
+        val token = Prefs.token(this) ?: return logout(showMessage = true)
+        Toast.makeText(this, R.string.route_calculating, Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            try {
+                val route = withContext(Dispatchers.IO) {
+                    ApiClient.fetchRoute(
+                        serverUrl, token,
+                        from.latitude, from.longitude, store.lat, store.lng,
+                        getString(R.string.error_unknown)
+                    )
+                }
+                showRoute(route)
+            } catch (e: Exception) {
+                if (e is ApiClient.ApiException && e.status == 401) logout(showMessage = true)
+                else Toast.makeText(
+                    this@MainActivity,
+                    getString(R.string.route_failed, e.message ?: getString(R.string.error_network)),
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
+
+    private fun showRoute(route: ApiClient.Route) {
+        clearRoute()
+        val line = Polyline(binding.map)
+        line.outlinePaint.color = Color.parseColor("#1565C0")
+        line.outlinePaint.strokeWidth = 10f
+        val points = route.points.map { GeoPoint(it[0], it[1]) }
+        line.setPoints(points)
+        // تحت الدبابيس والمضلعات
+        binding.map.overlays.add(0, line)
+        routeLine = line
+        val km = route.distanceMeters / 1000.0
+        val minutes = Math.round(route.durationSeconds / 60.0)
+        Toast.makeText(
+            this,
+            getString(R.string.route_summary, String.format("%.1f", km), minutes),
+            Toast.LENGTH_LONG
+        ).show()
+        binding.map.post {
+            binding.map.zoomToBoundingBox(BoundingBox.fromGeoPoints(points), false, 120)
+        }
+        binding.map.invalidate()
+    }
+
+    private fun clearRoute() {
+        routeLine?.let { binding.map.overlays.remove(it) }
+        routeLine = null
+        binding.map.invalidate()
     }
 
     private fun currentLocationOrWarn(): GeoPoint? {
