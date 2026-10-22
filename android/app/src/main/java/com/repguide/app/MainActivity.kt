@@ -26,6 +26,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.repguide.app.api.ApiClient
+import com.repguide.app.data.LandmarkEntity
 import com.repguide.app.data.RegionEntity
 import com.repguide.app.data.StoreEntity
 import com.repguide.app.databinding.ActivityMainBinding
@@ -87,11 +88,14 @@ class MainActivity : AppCompatActivity() {
     private lateinit var myLocationOverlay: MyLocationNewOverlay
     private val regionOverlay = FolderOverlay()
     private val labelOverlay = FolderOverlay()
+    private val landmarkOverlay = FolderOverlay()
     private lateinit var storeOverlay: StoresOverlay
 
     private var regions: List<RegionEntity> = emptyList()
     private var regionsById: Map<Int, RegionEntity> = emptyMap()
     private var stores: List<StoreEntity> = emptyList()
+    private var landmarks: List<LandmarkEntity> = emptyList()
+    private var landmarksVisible = false
     private var selectedRegionId: Int? = null
     private var renderedRegions: List<RegionEntity>? = null
     private var routeLine: Polyline? = null
@@ -198,7 +202,7 @@ class MainActivity : AppCompatActivity() {
                         getString(R.string.user_welcome, Prefs.userName(this@MainActivity).orEmpty()) +
                                 " — " + getString(R.string.stores_count, state.stores.size)
                     }
-                    onDataChanged(state.regions, state.stores)
+                    onDataChanged(state.regions, state.stores, state.landmarks)
                 }
             }
         }
@@ -206,17 +210,47 @@ class MainActivity : AppCompatActivity() {
         vm.loadLocal()
     }
 
-    private fun onDataChanged(newRegions: List<RegionEntity>, newStores: List<StoreEntity>) {
+    private fun onDataChanged(newRegions: List<RegionEntity>, newStores: List<StoreEntity>, newLandmarks: List<LandmarkEntity>) {
         val regionsChanged = newRegions !== regions
+        val landmarksChanged = newLandmarks !== landmarks
         regions = newRegions
         regionsById = newRegions.associateBy { it.id }
         stores = newStores
+        landmarks = newLandmarks
         if (regionsChanged && renderedRegions !== newRegions) {
             renderedRegions = newRegions
             buildRegionOverlays()
             rebuildSpinner()
         }
+        if (landmarksChanged && landmarksVisible) buildLandmarkOverlay()
         applyFilters()
+    }
+
+    /** طبقة المعالم (نقاط Google Earth) — تُبنى عند تفعيلها فقط وتظهر تسمياتها عند التكبير */
+    private fun buildLandmarkOverlay() {
+        landmarkOverlay.items.clear()
+        for (lm in landmarks) {
+            val marker = Marker(binding.map)
+            marker.position = GeoPoint(lm.lat, lm.lng)
+            marker.setTextIcon(lm.name)
+            marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+            marker.setOnMarkerClickListener { _, _ -> true }
+            landmarkOverlay.add(marker)
+        }
+        binding.map.invalidate()
+    }
+
+    private fun toggleLandmarks() {
+        landmarksVisible = !landmarksVisible
+        if (landmarksVisible) {
+            buildLandmarkOverlay()
+            if (!binding.map.overlays.contains(landmarkOverlay)) {
+                binding.map.overlays.add(0, landmarkOverlay)
+            }
+        } else {
+            binding.map.overlays.remove(landmarkOverlay)
+        }
+        binding.map.invalidate()
     }
 
     private fun regionColor(region: RegionEntity, index: Int): Int {
@@ -281,7 +315,8 @@ class MainActivity : AppCompatActivity() {
             (selectedRegionId == null || store.regionId == selectedRegionId) &&
                     (query.isEmpty() || normalizeArabic(store.name).contains(query))
         }
-        storeOverlay.stores = filtered
+        // المحلات بلا إحداثيات تظهر في البحث والقوائم لكن ليس على الخريطة
+        storeOverlay.stores = filtered.filter { it.lat != null && it.lng != null }
         binding.map.invalidate()
     }
 
@@ -319,8 +354,10 @@ class MainActivity : AppCompatActivity() {
         for (store in stores) {
             val name = normalizeArabic(store.name)
             val nameMatch = name.contains(query)
-            val phoneMatch = digits.length >= 2 && digitsOnly(store.phone).contains(digits)
-            if (!nameMatch && !phoneMatch) continue
+            val digitsMatch = digits.isNotEmpty() &&
+                    (store.code?.toString()?.contains(digits) == true ||
+                            (digits.length >= 2 && digitsOnly(store.phone).contains(digits)))
+            if (!nameMatch && !digitsMatch) continue
             if (name.startsWith(query)) startsWith.add(store) else contains.add(store)
         }
         val matches = startsWith + contains
@@ -359,6 +396,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun zoomToStore(store: StoreEntity) {
+        if (store.lat == null || store.lng == null) {
+            Toast.makeText(this, R.string.store_no_coords, Toast.LENGTH_LONG).show()
+            return
+        }
         val point = GeoPoint(store.lat, store.lng)
         binding.map.controller.setZoom(17.0)
         binding.map.controller.animateTo(point)
@@ -403,6 +444,7 @@ class MainActivity : AppCompatActivity() {
         popup.menu.add(getString(R.string.new_store))
         popup.menu.add(getString(R.string.sync))
         if (routeLine != null) popup.menu.add(getString(R.string.clear_route))
+        popup.menu.add(getString(if (landmarksVisible) R.string.hide_landmarks else R.string.show_landmarks))
         popup.menu.add(getString(R.string.server_settings))
         popup.menu.add(
             getString(
@@ -416,6 +458,8 @@ class MainActivity : AppCompatActivity() {
                 getString(R.string.new_store) -> showNewStoreDialog()
                 getString(R.string.sync) -> vm.sync()
                 getString(R.string.clear_route) -> clearRoute()
+                getString(R.string.show_landmarks),
+                getString(R.string.hide_landmarks) -> toggleLandmarks()
                 getString(R.string.server_settings) -> showServerDialog()
                 getString(R.string.logout) -> logout(showMessage = false)
                 getString(R.string.offline_maps_download),
@@ -456,6 +500,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun drawRouteTo(store: StoreEntity) {
+        if (store.lat == null || store.lng == null) {
+            Toast.makeText(this, R.string.store_no_coords, Toast.LENGTH_LONG).show()
+            return
+        }
         val from = currentLocationOrWarn() ?: return
         val serverUrl = Prefs.serverUrl(this)
         val token = Prefs.token(this) ?: return logout(showMessage = true)

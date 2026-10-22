@@ -10,9 +10,15 @@ dataRouter.get('/snapshot', authRequired, (req, res) => {
     .all()
     .map((r) => ({ ...r, polygon: r.polygon ? JSON.parse(r.polygon) : null }));
   const stores = db
-    .prepare('SELECT id, name, owner_name AS ownerName, phone, lat, lng, region_id AS regionId, notes FROM stores ORDER BY name')
+    .prepare(`SELECT id, name, owner_name AS ownerName, phone, lat, lng, region_id AS regionId, notes,
+              code, address,
+              b1_rep AS b1Rep, b1_channel AS b1Channel, b1_day AS b1Day,
+              b2_rep AS b2Rep, b2_channel AS b2Channel, b2_day AS b2Day,
+              b3_rep AS b3Rep, b3_channel AS b3Channel, b3_day AS b3Day
+              FROM stores ORDER BY name`)
     .all();
-  res.json({ version: getDataVersion(), regions, stores });
+  const landmarks = db.prepare('SELECT id, name, lat, lng FROM landmarks ORDER BY name').all();
+  res.json({ version: getDataVersion(), regions, stores, landmarks });
 });
 
 // تسجيل محل جديد ميدانياً من المندوب

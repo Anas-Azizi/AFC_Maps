@@ -20,7 +20,7 @@ export default function Layout() {
           <NavLink to="/regions">المناطق</NavLink>
           <NavLink to="/stores">المحلات</NavLink>
           <NavLink to="/submissions">المحلات الميدانية</NavLink>
-          <NavLink to="/import">استيراد KMZ</NavLink>
+          <NavLink to="/import">تحديث البيانات</NavLink>
         </nav>
         <div className="sidebar-footer">
           <span className="sidebar-user">{user?.name}</span>

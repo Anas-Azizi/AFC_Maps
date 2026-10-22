@@ -19,10 +19,29 @@ data class StoreEntity(
     val name: String,
     val ownerName: String?,
     val phone: String?,
-    val lat: Double,
-    val lng: Double,
+    val lat: Double?,
+    val lng: Double?,
     val regionId: Int?,
-    val notes: String?
+    val notes: String?,
+    val code: Int?,
+    val address: String?,
+    val b1Rep: String?,
+    val b1Channel: String?,
+    val b1Day: String?,
+    val b2Rep: String?,
+    val b2Channel: String?,
+    val b2Day: String?,
+    val b3Rep: String?,
+    val b3Channel: String?,
+    val b3Day: String?
+)
+
+@Entity(tableName = "landmarks")
+data class LandmarkEntity(
+    @PrimaryKey val id: Int,
+    val name: String,
+    val lat: Double,
+    val lng: Double
 )
 
 @Entity(tableName = "pending_submissions")

@@ -3,7 +3,9 @@ import multer from 'multer';
 import crypto from 'node:crypto';
 import { db, bumpDataVersion, withTransaction } from '../db.js';
 import { authRequired, adminRequired, hashPassword } from '../auth.js';
-import { parseKmz } from '../kmz.js';
+import { parseDistrictsKmz } from '../kmz.js';
+import { parseXlsx } from '../xlsx.js';
+import { assignRegions } from '../importer.js';
 
 export const adminRouter = Router();
 adminRouter.use(authRequired, adminRequired);
@@ -204,59 +206,112 @@ adminRouter.post('/updates/:id/archive', (req, res) => {
   res.json({ ok: true });
 });
 
-// ---------- استيراد KMZ ----------
+// ---------- استيراد البيانات (KMZ مناطق + Excel محلات) ----------
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 30 * 1024 * 1024 } });
 const pendingImports = new Map();
 
-adminRouter.post('/import/kmz', upload.single('file'), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'الملف مطلوب' });
-  let parsed;
-  try {
-    parsed = parseKmz(req.file.buffer);
-  } catch (e) {
-    return res.status(400).json({ error: e.message });
+adminRouter.post(
+  '/import/files',
+  upload.fields([
+    { name: 'kmz', maxCount: 1 },
+    { name: 'xlsx', maxCount: 1 },
+  ]),
+  (req, res) => {
+    const kmzFile = req.files?.kmz?.[0];
+    const xlsxFile = req.files?.xlsx?.[0];
+    if (!kmzFile || !xlsxFile) {
+      return res.status(400).json({ error: 'ملفا KMZ و Excel مطلوبان معاً' });
+    }
+    let parsedKmz;
+    let parsedXlsx;
+    try {
+      parsedKmz = parseDistrictsKmz(kmzFile.buffer);
+    } catch (e) {
+      return res.status(400).json({ error: `ملف KMZ: ${e.message}` });
+    }
+    try {
+      parsedXlsx = parseXlsx(xlsxFile.buffer);
+    } catch (e) {
+      return res.status(400).json({ error: `ملف Excel: ${e.message}` });
+    }
+
+    const { regions, stats: assignStats } = assignRegions(parsedXlsx.stores, parsedKmz.regions);
+
+    const importId = crypto.randomUUID();
+    pendingImports.set(importId, {
+      stores: parsedXlsx.stores,
+      regions,
+      landmarks: parsedKmz.landmarks,
+      at: Date.now(),
+    });
+    setTimeout(() => pendingImports.delete(importId), 10 * 60 * 1000).unref();
+
+    res.json({
+      importId,
+      stats: {
+        regions: regions.length,
+        polygons: regions.filter((r) => r.polygon).length,
+        landmarks: parsedKmz.landmarks.length,
+        stores: parsedXlsx.stats.total,
+        storesNoCoords: parsedXlsx.stats.noCoords,
+        assignedByPolygon: assignStats.byPolygon,
+        assignedByName: assignStats.byName,
+        noRegion: assignStats.noRegion,
+      },
+      regions: regions.map((r) => ({
+        name: r.name,
+        storeCount: r.storeCount,
+        hasPolygon: !!r.polygon,
+      })),
+    });
   }
-  const importId = crypto.randomUUID();
-  pendingImports.set(importId, { parsed, at: Date.now() });
-  setTimeout(() => pendingImports.delete(importId), 10 * 60 * 1000).unref();
-  res.json({
-    importId,
-    stats: parsed.stats,
-    regions: parsed.regions.map((r) => ({
-      name: r.name,
-      storeCount: r.stores.length,
-      hasPolygon: !!r.polygon,
-    })),
-  });
-});
+);
 
 adminRouter.post('/import/confirm', (req, res) => {
-  const { importId, mode = 'replace' } = req.body || {};
+  const { importId } = req.body || {};
   const pending = pendingImports.get(importId);
-  if (!pending) return res.status(400).json({ error: 'جلسة الاستيراد انتهت، أعد رفع الملف' });
+  if (!pending) return res.status(400).json({ error: 'جلسة الاستيراد انتهت، أعد رفع الملفين' });
   pendingImports.delete(importId);
 
-  const apply = () => withTransaction(() => {
-    if (mode === 'replace') {
-      db.exec('DELETE FROM stores');
-      db.exec('DELETE FROM regions');
-    }
-    const insertRegion = db.prepare('INSERT INTO regions (name, polygon, label_lat, label_lng) VALUES (?, ?, ?, ?) ON CONFLICT(name) DO UPDATE SET polygon = COALESCE(excluded.polygon, regions.polygon), label_lat = COALESCE(excluded.label_lat, regions.label_lat), label_lng = COALESCE(excluded.label_lng, regions.label_lng)');
-    const findRegion = db.prepare('SELECT id FROM regions WHERE name = ?');
-    const findStore = db.prepare('SELECT id FROM stores WHERE name = ? AND region_id = ?');
-    const insertStore = db.prepare('INSERT INTO stores (name, lat, lng, region_id) VALUES (?, ?, ?, ?)');
+  withTransaction(() => {
+    db.exec('DELETE FROM stores');
+    db.exec('DELETE FROM regions');
+    db.exec('DELETE FROM landmarks');
 
-    for (const region of pending.parsed.regions) {
-      insertRegion.run(region.name, region.polygon ? JSON.stringify(region.polygon) : null, region.labelLat, region.labelLng);
-      const regionId = findRegion.get(region.name).id;
-      for (const store of region.stores) {
-        if (mode === 'merge' && findStore.get(store.name, regionId)) continue;
-        insertStore.run(store.name, store.lat, store.lng, regionId);
-      }
+    const insertRegion = db.prepare(
+      'INSERT INTO regions (name, polygon, label_lat, label_lng) VALUES (?, ?, ?, ?)'
+    );
+    const regionIds = new Map();
+    for (const r of pending.regions) {
+      const info = insertRegion.run(
+        r.name,
+        r.polygon ? JSON.stringify(r.polygon) : null,
+        r.labelLat,
+        r.labelLng
+      );
+      regionIds.set(r.name, info.lastInsertRowid);
+    }
+
+    const insertLandmark = db.prepare('INSERT INTO landmarks (name, lat, lng) VALUES (?, ?, ?)');
+    for (const l of pending.landmarks) insertLandmark.run(l.name, l.lat, l.lng);
+
+    const insertStore = db.prepare(
+      `INSERT INTO stores (name, lat, lng, region_id, code, address,
+        b1_rep, b1_channel, b1_day, b2_rep, b2_channel, b2_day, b3_rep, b3_channel, b3_day)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    for (const s of pending.stores) {
+      insertStore.run(
+        s.name, s.lat, s.lng,
+        s.regionName ? regionIds.get(s.regionName) ?? null : null,
+        s.code, s.address,
+        s.b1Rep, s.b1Channel, s.b1Day,
+        s.b2Rep, s.b2Channel, s.b2Day,
+        s.b3Rep, s.b3Channel, s.b3Day
+      );
     }
   });
-  apply();
   bumpDataVersion();
-  res.json({ ok: true, stats: pending.parsed.stats });
+  res.json({ ok: true });
 });

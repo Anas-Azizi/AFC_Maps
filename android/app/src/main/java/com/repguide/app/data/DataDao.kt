@@ -17,11 +17,17 @@ interface DataDao {
     @Query("SELECT * FROM stores ORDER BY name")
     suspend fun allStores(): List<StoreEntity>
 
+    @Query("SELECT * FROM landmarks ORDER BY name")
+    suspend fun allLandmarks(): List<LandmarkEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertRegions(regions: List<RegionEntity>)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertStores(stores: List<StoreEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertLandmarks(landmarks: List<LandmarkEntity>)
 
     @Query("DELETE FROM stores")
     suspend fun clearStores()
@@ -29,18 +35,24 @@ interface DataDao {
     @Query("DELETE FROM regions")
     suspend fun clearRegions()
 
+    @Query("DELETE FROM landmarks")
+    suspend fun clearLandmarks()
+
     @Transaction
-    suspend fun replaceAll(regions: List<RegionEntity>, stores: List<StoreEntity>) {
+    suspend fun replaceAll(regions: List<RegionEntity>, stores: List<StoreEntity>, landmarks: List<LandmarkEntity>) {
         clearStores()
         clearRegions()
+        clearLandmarks()
         insertRegions(regions)
         insertStores(stores)
+        insertLandmarks(landmarks)
     }
 
     @Transaction
     suspend fun clearAll() {
         clearStores()
         clearRegions()
+        clearLandmarks()
     }
 
     @Insert

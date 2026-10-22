@@ -1,5 +1,6 @@
 package com.repguide.app.api
 
+import com.repguide.app.data.LandmarkEntity
 import com.repguide.app.data.RegionEntity
 import com.repguide.app.data.StoreEntity
 import okhttp3.MediaType.Companion.toMediaType
@@ -26,7 +27,8 @@ object ApiClient {
     data class Snapshot(
         val version: Int,
         val regions: List<RegionEntity>,
-        val stores: List<StoreEntity>
+        val stores: List<StoreEntity>,
+        val landmarks: List<LandmarkEntity>
     )
 
     private fun execute(request: Request, unknownError: String): String {
@@ -138,22 +140,52 @@ object ApiClient {
 
         val storesJson = json.getJSONArray("stores")
         val stores = ArrayList<StoreEntity>(storesJson.length())
+        fun JSONObject.str(key: String): String? = if (isNull(key)) null else getString(key)
+        fun JSONObject.dbl(key: String): Double? = if (isNull(key)) null else getDouble(key)
+        fun JSONObject.intOrNull(key: String): Int? = if (isNull(key)) null else getInt(key)
         for (i in 0 until storesJson.length()) {
             val s = storesJson.getJSONObject(i)
             stores.add(
                 StoreEntity(
                     id = s.getInt("id"),
                     name = s.getString("name"),
-                    ownerName = if (s.isNull("ownerName")) null else s.getString("ownerName"),
-                    phone = if (s.isNull("phone")) null else s.getString("phone"),
-                    lat = s.getDouble("lat"),
-                    lng = s.getDouble("lng"),
-                    regionId = if (s.isNull("regionId")) null else s.getInt("regionId"),
-                    notes = if (s.isNull("notes")) null else s.getString("notes")
+                    ownerName = s.str("ownerName"),
+                    phone = s.str("phone"),
+                    lat = s.dbl("lat"),
+                    lng = s.dbl("lng"),
+                    regionId = s.intOrNull("regionId"),
+                    notes = s.str("notes"),
+                    code = s.intOrNull("code"),
+                    address = s.str("address"),
+                    b1Rep = s.str("b1Rep"),
+                    b1Channel = s.str("b1Channel"),
+                    b1Day = s.str("b1Day"),
+                    b2Rep = s.str("b2Rep"),
+                    b2Channel = s.str("b2Channel"),
+                    b2Day = s.str("b2Day"),
+                    b3Rep = s.str("b3Rep"),
+                    b3Channel = s.str("b3Channel"),
+                    b3Day = s.str("b3Day")
                 )
             )
         }
-        return Snapshot(json.optInt("version", 0), regions, stores)
+
+        val landmarksJson = json.optJSONArray("landmarks")
+        val landmarks = ArrayList<LandmarkEntity>(landmarksJson?.length() ?: 0)
+        if (landmarksJson != null) {
+            for (i in 0 until landmarksJson.length()) {
+                val l = landmarksJson.getJSONObject(i)
+                landmarks.add(
+                    LandmarkEntity(
+                        id = l.getInt("id"),
+                        name = l.getString("name"),
+                        lat = l.getDouble("lat"),
+                        lng = l.getDouble("lng")
+                    )
+                )
+            }
+        }
+        return Snapshot(json.optInt("version", 0), regions, stores, landmarks)
     }
 
     data class TilesInfo(

@@ -127,3 +127,60 @@ export function parseKmz(buffer) {
     },
   };
 }
+
+/**
+ * يحلل ملف KMZ ببنية «Districts» الجديدة:
+ *   Districts > Borders        → مضلعات حدود المناطق
+ *   Districts > District Names → نقاط تسمية المناطق
+ *   Districts > placemark      → نقاط المعالم (مدارس، جوامع…)
+ */
+export function parseDistrictsKmz(buffer) {
+  const zip = new AdmZip(buffer);
+  const entry = zip.getEntries().find((e) => e.entryName.toLowerCase().endsWith('.kml'));
+  if (!entry) throw new Error('ملف KMZ لا يحتوي ملف KML');
+  const doc = parser.parse(entry.getData().toString('utf8'));
+  const document = doc?.kml?.Document;
+  if (!document) throw new Error('بنية KML غير صالحة');
+
+  const borders = findFolderDeep(document, 'Borders');
+  if (!borders) throw new Error('لم يُعثر على مجلد Borders (حدود المناطق) في الملف');
+
+  const regionMap = new Map();
+  for (const { name, polygon } of collectPolygons(borders)) {
+    if (!name) continue;
+    regionMap.set(normalizeName(name), { name, polygon, labelLat: null, labelLng: null });
+  }
+  if (regionMap.size === 0) throw new Error('مجلد Borders لا يحتوي أي مضلع');
+
+  const labelFolder = findFolderDeep(document, 'District Names');
+  if (labelFolder) {
+    for (const pm of asArray(labelFolder.Placemark)) {
+      const point = parsePoint(pm);
+      const region = point && regionMap.get(normalizeName(folderName(pm)));
+      if (region) {
+        region.labelLat = point.lat;
+        region.labelLng = point.lng;
+      }
+    }
+  }
+
+  const landmarks = [];
+  const landmarksFolder = findFolderDeep(document, 'placemark');
+  if (landmarksFolder) {
+    for (const pm of asArray(landmarksFolder.Placemark)) {
+      const point = parsePoint(pm);
+      const name = folderName(pm);
+      if (point && name) landmarks.push({ name, ...point });
+    }
+  }
+
+  return {
+    regions: [...regionMap.values()],
+    landmarks,
+    stats: {
+      regions: regionMap.size,
+      landmarks: landmarks.length,
+      labels: [...regionMap.values()].filter((r) => r.labelLat != null).length,
+    },
+  };
+}

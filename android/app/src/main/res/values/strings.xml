@@ -69,4 +69,13 @@
     <string name="route_summary">المسافة %1$s كم — المدة التقريبية %2$d دقيقة بالسيارة</string>
     <string name="route_failed">تعذّر حساب المسار: %1$s</string>
     <string name="clear_route">مسح المسار من الخريطة</string>
+    <string name="show_landmarks">إظهار المعالم</string>
+    <string name="hide_landmarks">إخفاء المعالم</string>
+    <string name="store_no_coords">لا تتوفر إحداثيات لهذا الزبون بعد</string>
+    <string name="customer_code">الكود:</string>
+    <string name="address">العنوان:</string>
+    <string name="basket_title">السلة %1$d</string>
+    <string name="salesperson">المندوب:</string>
+    <string name="classification">التصنيف:</string>
+    <string name="visit_day">يوم الزيارة:</string>
 </resources>

@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.repguide.app.api.ApiClient
 import com.repguide.app.data.AppDatabase
+import com.repguide.app.data.LandmarkEntity
 import com.repguide.app.data.PendingSubmissionEntity
 import com.repguide.app.data.PendingUpdateEntity
 import com.repguide.app.data.RegionEntity
@@ -26,6 +27,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     data class UiState(
         val regions: List<RegionEntity> = emptyList(),
         val stores: List<StoreEntity> = emptyList(),
+        val landmarks: List<LandmarkEntity> = emptyList(),
         val syncing: Boolean = false,
         val event: Event? = null
     )
@@ -37,10 +39,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun loadLocal(syncIfEmpty: Boolean = true) {
         viewModelScope.launch {
-            val (regions, stores) = withContext(Dispatchers.IO) {
-                dao.allRegions() to dao.allStores()
+            val (regions, stores, landmarks) = withContext(Dispatchers.IO) {
+                Triple(dao.allRegions(), dao.allStores(), dao.allLandmarks())
             }
-            _state.update { it.copy(regions = regions, stores = stores) }
+            _state.update { it.copy(regions = regions, stores = stores, landmarks = landmarks) }
             if (syncIfEmpty && stores.isEmpty()) sync()
         }
     }
@@ -61,13 +63,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 }
                 withContext(Dispatchers.IO) {
-                    dao.replaceAll(snapshot.regions, snapshot.stores)
+                    dao.replaceAll(snapshot.regions, snapshot.stores, snapshot.landmarks)
                     Prefs.setDataVersion(ctx, snapshot.version)
                 }
                 _state.update {
                     it.copy(
                         regions = snapshot.regions,
                         stores = snapshot.stores,
+                        landmarks = snapshot.landmarks,
                         event = Event.Message(
                             ctx.getString(R.string.sync_success, snapshot.version)
                         )

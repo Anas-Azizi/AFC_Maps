@@ -73,6 +73,8 @@ class StoresOverlay(
 
     private fun labelOf(store: StoreEntity): Label =
         labelCache.getOrPut(store.id) {
+            store.code?.let { return@getOrPut Label(store.name, it.toString()) }
+            // بيانات قديمة: الكود مدمج في الاسم
             val match = Regex("\\d{3,}").find(store.name)
                 ?: return@getOrPut Label(store.name, null)
             val clean = store.name.replace(match.value, "").trim()
@@ -92,7 +94,9 @@ class StoresOverlay(
         val padV = 3 * density
 
         for (store in stores) {
-            pj.toPixels(GeoPoint(store.lat, store.lng), tmpPoint)
+            val lat = store.lat ?: continue
+            val lng = store.lng ?: continue
+            pj.toPixels(GeoPoint(lat, lng), tmpPoint)
             if (!clip.contains(tmpPoint.x, tmpPoint.y)) continue
 
             canvas.drawBitmap(
@@ -140,7 +144,9 @@ class StoresOverlay(
         var best: StoreEntity? = null
         var bestDist = Double.MAX_VALUE
         for (store in stores) {
-            pj.toPixels(GeoPoint(store.lat, store.lng), tmpPoint)
+            val lat = store.lat ?: continue
+            val lng = store.lng ?: continue
+            pj.toPixels(GeoPoint(lat, lng), tmpPoint)
             // مركز الضربة: منتصف الدبوس
             val d = hypot(
                 (e.x - tmpPoint.x).toDouble(),

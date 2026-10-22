@@ -68,12 +68,13 @@ export const api = {
   updateStore: (id, s) => request(`/api/admin/stores/${id}`, { method: 'PUT', body: s }),
   deleteStore: (id) => request(`/api/admin/stores/${id}`, { method: 'DELETE' }),
 
-  uploadKmz: (file) => {
+  uploadImportFiles: (kmzFile, xlsxFile) => {
     const fd = new FormData();
-    fd.append('file', file);
-    return request('/api/admin/import/kmz', { method: 'POST', formData: fd });
+    fd.append('kmz', kmzFile);
+    fd.append('xlsx', xlsxFile);
+    return request('/api/admin/import/files', { method: 'POST', formData: fd });
   },
-  confirmImport: (importId, mode) => request('/api/admin/import/confirm', { method: 'POST', body: { importId, mode } }),
+  confirmImport: (importId) => request('/api/admin/import/confirm', { method: 'POST', body: { importId } }),
 
   listSubmissions: (archived = false) => request(`/api/admin/submissions${archived ? '?archived=1' : ''}`),
   setSubmissionArchived: (id, archived) => request(`/api/admin/submissions/${id}/archive`, { method: 'POST', body: { archived } }),
