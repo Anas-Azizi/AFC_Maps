@@ -10,15 +10,17 @@ dataRouter.get('/snapshot', authRequired, (req, res) => {
     .all()
     .map((r) => ({ ...r, polygon: r.polygon ? JSON.parse(r.polygon) : null }));
   const stores = db
-    .prepare(`SELECT id, name, owner_name AS ownerName, phone, lat, lng, region_id AS regionId, notes,
-              code, address,
-              b1_rep AS b1Rep, b1_channel AS b1Channel, b1_day AS b1Day,
-              b2_rep AS b2Rep, b2_channel AS b2Channel, b2_day AS b2Day,
-              b3_rep AS b3Rep, b3_channel AS b3Channel, b3_day AS b3Day
-              FROM stores ORDER BY name`)
+    .prepare(`SELECT id, name, owner_name AS ownerName, phone, whatsapp, lat, lng, region_id AS regionId, notes,
+              code, address, account_type AS accountType, status, category,
+              shop_class AS shopClass, manager_name AS managerName, governate
+              FROM stores WHERE map_show = 1 ORDER BY name`)
+    .all();
+  const visits = db
+    .prepare(`SELECT v.store_id AS storeId, v.rep_name AS repName, v.invoice_type AS invoiceType, v.visit_day AS visitDay
+              FROM visits v JOIN stores s ON s.id = v.store_id WHERE s.map_show = 1 ORDER BY v.id`)
     .all();
   const landmarks = db.prepare('SELECT id, name, lat, lng FROM landmarks ORDER BY name').all();
-  res.json({ version: getDataVersion(), regions, stores, landmarks });
+  res.json({ version: getDataVersion(), regions, stores, visits, landmarks });
 });
 
 // تسجيل محل جديد ميدانياً من المندوب

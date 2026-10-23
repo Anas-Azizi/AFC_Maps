@@ -38,12 +38,26 @@ CREATE TABLE IF NOT EXISTS stores (
   notes TEXT,
   code INTEGER,
   address TEXT,
-  b1_rep TEXT, b1_channel TEXT, b1_day TEXT,
-  b2_rep TEXT, b2_channel TEXT, b2_day TEXT,
-  b3_rep TEXT, b3_channel TEXT, b3_day TEXT
+  account_type TEXT,
+  status TEXT,
+  map_show INTEGER NOT NULL DEFAULT 1,
+  category TEXT,
+  shop_class TEXT,
+  manager_name TEXT,
+  governate TEXT,
+  whatsapp TEXT
+);
+
+CREATE TABLE IF NOT EXISTS visits (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  store_id INTEGER NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+  rep_name TEXT,
+  invoice_type TEXT,
+  visit_day TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_stores_region ON stores(region_id);
+CREATE INDEX IF NOT EXISTS idx_visits_store ON visits(store_id);
 
 CREATE TABLE IF NOT EXISTS landmarks (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -80,10 +94,14 @@ CREATE TABLE IF NOT EXISTS meta (
 );
 `);
 
-// ترحيل قواعد موجودة قبل إضافة الحقول الجديدة: إعادة بناء stores مع الأعمدة الجديدة و lat/lng nullable
+// ترحيل قواعد موجودة قبل إضافة الحقول الجديدة: إعادة بناء stores بالمخطط النهائي
+// (يغطي الانتقال من المخطط القديم بلا code، ومن مخطط السلات b1..b3)
 {
   const cols = db.prepare('PRAGMA table_info(stores)').all();
-  if (cols.length && !cols.some((c) => c.name === 'code')) {
+  if (cols.length && !cols.some((c) => c.name === 'map_show')) {
+    const have = new Set(cols.map((c) => c.name));
+    const copyCols = ['id', 'name', 'owner_name', 'phone', 'lat', 'lng', 'region_id', 'notes', 'code', 'address']
+      .filter((c) => have.has(c));
     db.exec(`
       BEGIN;
       CREATE TABLE stores_new (
@@ -97,12 +115,17 @@ CREATE TABLE IF NOT EXISTS meta (
         notes TEXT,
         code INTEGER,
         address TEXT,
-        b1_rep TEXT, b1_channel TEXT, b1_day TEXT,
-        b2_rep TEXT, b2_channel TEXT, b2_day TEXT,
-        b3_rep TEXT, b3_channel TEXT, b3_day TEXT
+        account_type TEXT,
+        status TEXT,
+        map_show INTEGER NOT NULL DEFAULT 1,
+        category TEXT,
+        shop_class TEXT,
+        manager_name TEXT,
+        governate TEXT,
+        whatsapp TEXT
       );
-      INSERT INTO stores_new (id, name, owner_name, phone, lat, lng, region_id, notes)
-        SELECT id, name, owner_name, phone, lat, lng, region_id, notes FROM stores;
+      INSERT INTO stores_new (${copyCols.join(', ')})
+        SELECT ${copyCols.join(', ')} FROM stores;
       DROP TABLE stores;
       ALTER TABLE stores_new RENAME TO stores;
       CREATE INDEX IF NOT EXISTS idx_stores_region ON stores(region_id);

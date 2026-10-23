@@ -74,9 +74,51 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
     }
 }
 
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // إعادة بناء stores: إسقاط أعمدة السلات وإضافة الحقول الجديدة + جدول الزيارات
+        db.execSQL(
+            """CREATE TABLE stores_new (
+                id INTEGER PRIMARY KEY NOT NULL,
+                name TEXT NOT NULL,
+                ownerName TEXT,
+                phone TEXT,
+                lat REAL,
+                lng REAL,
+                regionId INTEGER,
+                notes TEXT,
+                code INTEGER,
+                address TEXT,
+                whatsapp TEXT,
+                accountType TEXT,
+                status TEXT,
+                category TEXT,
+                shopClass TEXT,
+                managerName TEXT,
+                governate TEXT
+            )"""
+        )
+        db.execSQL(
+            """INSERT INTO stores_new (id, name, ownerName, phone, lat, lng, regionId, notes, code, address)
+               SELECT id, name, ownerName, phone, lat, lng, regionId, notes, code, address FROM stores"""
+        )
+        db.execSQL("DROP TABLE stores")
+        db.execSQL("ALTER TABLE stores_new RENAME TO stores")
+        db.execSQL(
+            """CREATE TABLE IF NOT EXISTS visits (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                storeId INTEGER NOT NULL,
+                repName TEXT,
+                invoiceType TEXT,
+                visitDay TEXT
+            )"""
+        )
+    }
+}
+
 @Database(
-    entities = [RegionEntity::class, StoreEntity::class, PendingSubmissionEntity::class, PendingUpdateEntity::class, LandmarkEntity::class],
-    version = 4,
+    entities = [RegionEntity::class, StoreEntity::class, PendingSubmissionEntity::class, PendingUpdateEntity::class, LandmarkEntity::class, VisitEntity::class],
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -92,7 +134,7 @@ abstract class AppDatabase : RoomDatabase() {
                     ctx.applicationContext,
                     AppDatabase::class.java,
                     "rep_guide.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build().also { instance = it }
             }
     }
 }

@@ -29,6 +29,12 @@ interface DataDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertLandmarks(landmarks: List<LandmarkEntity>)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertVisits(visits: List<VisitEntity>)
+
+    @Query("SELECT * FROM visits WHERE storeId = :storeId")
+    suspend fun visitsForStore(storeId: Int): List<VisitEntity>
+
     @Query("DELETE FROM stores")
     suspend fun clearStores()
 
@@ -38,14 +44,24 @@ interface DataDao {
     @Query("DELETE FROM landmarks")
     suspend fun clearLandmarks()
 
+    @Query("DELETE FROM visits")
+    suspend fun clearVisits()
+
     @Transaction
-    suspend fun replaceAll(regions: List<RegionEntity>, stores: List<StoreEntity>, landmarks: List<LandmarkEntity>) {
+    suspend fun replaceAll(
+        regions: List<RegionEntity>,
+        stores: List<StoreEntity>,
+        landmarks: List<LandmarkEntity>,
+        visits: List<VisitEntity>
+    ) {
         clearStores()
         clearRegions()
         clearLandmarks()
+        clearVisits()
         insertRegions(regions)
         insertStores(stores)
         insertLandmarks(landmarks)
+        insertVisits(visits)
     }
 
     @Transaction
@@ -53,6 +69,7 @@ interface DataDao {
         clearStores()
         clearRegions()
         clearLandmarks()
+        clearVisits()
     }
 
     @Insert

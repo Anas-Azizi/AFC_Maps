@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { db, bumpDataVersion, withTransaction } from '../db.js';
 import { authRequired, adminRequired, hashPassword } from '../auth.js';
 import { parseDistrictsKmz } from '../kmz.js';
-import { parseXlsx } from '../xlsx.js';
+import { parseCustomersXlsx, parseRoutesXlsx } from '../xlsx.js';
 import { assignRegions } from '../importer.js';
 
 export const adminRouter = Router();
@@ -115,16 +115,32 @@ adminRouter.delete('/regions/:id', (req, res) => {
 
 // ---------- المحلات ----------
 
+const STORE_COLS = `id, name, owner_name AS ownerName, phone, whatsapp, lat, lng,
+  region_id AS regionId, notes, code, address, account_type AS accountType, status,
+  map_show AS mapShow, category, shop_class AS shopClass, manager_name AS managerName, governate`;
+
 adminRouter.get('/stores', (req, res) => {
   const { regionId, q } = req.query;
-  let sql = 'SELECT id, name, owner_name AS ownerName, phone, lat, lng, region_id AS regionId, notes FROM stores';
+  let sql = `SELECT ${STORE_COLS} FROM stores`;
   const where = [];
   const params = [];
   if (regionId) { where.push('region_id = ?'); params.push(Number(regionId)); }
-  if (q) { where.push('name LIKE ?'); params.push(`%${q}%`); }
+  if (q) {
+    where.push('(name LIKE ? OR CAST(code AS TEXT) LIKE ?)');
+    params.push(`%${q}%`, `%${q}%`);
+  }
   if (where.length) sql += ' WHERE ' + where.join(' AND ');
   sql += ' ORDER BY name LIMIT 500';
   res.json(db.prepare(sql).all(...params));
+});
+
+adminRouter.get('/stores/:id', (req, res) => {
+  const store = db.prepare(`SELECT ${STORE_COLS} FROM stores WHERE id = ?`).get(Number(req.params.id));
+  if (!store) return res.status(404).json({ error: 'المحل غير موجود' });
+  const visits = db
+    .prepare('SELECT id, rep_name AS repName, invoice_type AS invoiceType, visit_day AS visitDay FROM visits WHERE store_id = ? ORDER BY id')
+    .all(store.id);
+  res.json({ ...store, visits });
 });
 
 adminRouter.post('/stores', (req, res) => {
@@ -137,21 +153,28 @@ adminRouter.post('/stores', (req, res) => {
   res.status(201).json({ id: info.lastInsertRowid });
 });
 
+const EDITABLE_STORE_FIELDS = {
+  name: 'name', ownerName: 'owner_name', phone: 'phone', whatsapp: 'whatsapp',
+  lat: 'lat', lng: 'lng', regionId: 'region_id', notes: 'notes', code: 'code',
+  address: 'address', accountType: 'account_type', status: 'status',
+  category: 'category', shopClass: 'shop_class', managerName: 'manager_name',
+  governate: 'governate',
+};
+
 adminRouter.put('/stores/:id', (req, res) => {
   const id = Number(req.params.id);
   const store = db.prepare('SELECT * FROM stores WHERE id = ?').get(id);
   if (!store) return res.status(404).json({ error: 'المحل غير موجود' });
-  const { name, ownerName, phone, lat, lng, regionId, notes } = req.body || {};
-  db.prepare('UPDATE stores SET name = ?, owner_name = ?, phone = ?, lat = ?, lng = ?, region_id = ?, notes = ? WHERE id = ?').run(
-    name ?? store.name,
-    ownerName ?? store.owner_name,
-    phone ?? store.phone,
-    lat ?? store.lat,
-    lng ?? store.lng,
-    regionId ?? store.region_id,
-    notes ?? store.notes,
-    id
-  );
+  const body = req.body || {};
+  const sets = [];
+  const params = [];
+  for (const [key, col] of Object.entries(EDITABLE_STORE_FIELDS)) {
+    if (body[key] !== undefined) { sets.push(`${col} = ?`); params.push(body[key]); }
+  }
+  if (body.mapShow !== undefined) { sets.push('map_show = ?'); params.push(body.mapShow ? 1 : 0); }
+  if (!sets.length) return res.status(400).json({ error: 'لا يوجد حقول للتعديل' });
+  params.push(id);
+  db.prepare(`UPDATE stores SET ${sets.join(', ')} WHERE id = ?`).run(...params);
   bumpDataVersion();
   res.json({ ok: true });
 });
@@ -159,6 +182,44 @@ adminRouter.put('/stores/:id', (req, res) => {
 adminRouter.delete('/stores/:id', (req, res) => {
   const info = db.prepare('DELETE FROM stores WHERE id = ?').run(Number(req.params.id));
   if (!info.changes) return res.status(404).json({ error: 'المحل غير موجود' });
+  bumpDataVersion();
+  res.json({ ok: true });
+});
+
+// ---------- زيارات المندوبين ----------
+
+adminRouter.post('/stores/:id/visits', (req, res) => {
+  const storeId = Number(req.params.id);
+  if (!db.prepare('SELECT id FROM stores WHERE id = ?').get(storeId)) {
+    return res.status(404).json({ error: 'المحل غير موجود' });
+  }
+  const { repName, invoiceType, visitDay } = req.body || {};
+  if (!repName) return res.status(400).json({ error: 'اسم المندوب مطلوب' });
+  const info = db
+    .prepare('INSERT INTO visits (store_id, rep_name, invoice_type, visit_day) VALUES (?, ?, ?, ?)')
+    .run(storeId, repName, invoiceType ?? null, visitDay ?? null);
+  bumpDataVersion();
+  res.status(201).json({ id: info.lastInsertRowid });
+});
+
+adminRouter.put('/visits/:id', (req, res) => {
+  const id = Number(req.params.id);
+  const visit = db.prepare('SELECT * FROM visits WHERE id = ?').get(id);
+  if (!visit) return res.status(404).json({ error: 'الزيارة غير موجودة' });
+  const { repName, invoiceType, visitDay } = req.body || {};
+  db.prepare('UPDATE visits SET rep_name = ?, invoice_type = ?, visit_day = ? WHERE id = ?').run(
+    repName ?? visit.rep_name,
+    invoiceType !== undefined ? invoiceType : visit.invoice_type,
+    visitDay !== undefined ? visitDay : visit.visit_day,
+    id
+  );
+  bumpDataVersion();
+  res.json({ ok: true });
+});
+
+adminRouter.delete('/visits/:id', (req, res) => {
+  const info = db.prepare('DELETE FROM visits WHERE id = ?').run(Number(req.params.id));
+  if (!info.changes) return res.status(404).json({ error: 'الزيارة غير موجودة' });
   bumpDataVersion();
   res.json({ ok: true });
 });
@@ -206,7 +267,7 @@ adminRouter.post('/updates/:id/archive', (req, res) => {
   res.json({ ok: true });
 });
 
-// ---------- استيراد البيانات (KMZ مناطق + Excel محلات) ----------
+// ---------- استيراد البيانات (KMZ مناطق + Excel زبائن + Excel مسارات) ----------
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 30 * 1024 * 1024 } });
 const pendingImports = new Map();
@@ -215,32 +276,46 @@ adminRouter.post(
   '/import/files',
   upload.fields([
     { name: 'kmz', maxCount: 1 },
-    { name: 'xlsx', maxCount: 1 },
+    { name: 'customers', maxCount: 1 },
+    { name: 'routes', maxCount: 1 },
   ]),
   (req, res) => {
     const kmzFile = req.files?.kmz?.[0];
-    const xlsxFile = req.files?.xlsx?.[0];
-    if (!kmzFile || !xlsxFile) {
-      return res.status(400).json({ error: 'ملفا KMZ و Excel مطلوبان معاً' });
+    const customersFile = req.files?.customers?.[0];
+    const routesFile = req.files?.routes?.[0];
+    if (!kmzFile || !customersFile || !routesFile) {
+      return res.status(400).json({ error: 'الملفات الثلاثة مطلوبة: KMZ + الزبائن + المسارات' });
     }
     let parsedKmz;
-    let parsedXlsx;
+    let parsedCustomers;
+    let parsedRoutes;
     try {
       parsedKmz = parseDistrictsKmz(kmzFile.buffer);
     } catch (e) {
       return res.status(400).json({ error: `ملف KMZ: ${e.message}` });
     }
     try {
-      parsedXlsx = parseXlsx(xlsxFile.buffer);
+      parsedCustomers = parseCustomersXlsx(customersFile.buffer);
     } catch (e) {
-      return res.status(400).json({ error: `ملف Excel: ${e.message}` });
+      return res.status(400).json({ error: `ملف الزبائن: ${e.message}` });
+    }
+    try {
+      parsedRoutes = parseRoutesXlsx(routesFile.buffer);
+    } catch (e) {
+      return res.status(400).json({ error: `ملف المسارات: ${e.message}` });
     }
 
-    const { regions, stats: assignStats } = assignRegions(parsedXlsx.stores, parsedKmz.regions);
+    // إسقاط زيارات تشير لأكواد غير موجودة في ملف الزبائن
+    const knownCodes = new Set(parsedCustomers.stores.map((s) => s.code).filter((c) => c != null));
+    const visits = parsedRoutes.visits.filter((v) => knownCodes.has(v.code));
+    const orphanVisits = parsedRoutes.visits.length - visits.length;
+
+    const { regions, stats: assignStats } = assignRegions(parsedCustomers.stores, parsedKmz.regions);
 
     const importId = crypto.randomUUID();
     pendingImports.set(importId, {
-      stores: parsedXlsx.stores,
+      stores: parsedCustomers.stores,
+      visits,
       regions,
       landmarks: parsedKmz.landmarks,
       at: Date.now(),
@@ -253,8 +328,13 @@ adminRouter.post(
         regions: regions.length,
         polygons: regions.filter((r) => r.polygon).length,
         landmarks: parsedKmz.landmarks.length,
-        stores: parsedXlsx.stats.total,
-        storesNoCoords: parsedXlsx.stats.noCoords,
+        stores: parsedCustomers.stats.total,
+        storesNoCoords: parsedCustomers.stats.noCoords,
+        cancelled: parsedCustomers.stats.cancelled,
+        mapShown: parsedCustomers.stats.mapShown,
+        visits: visits.length,
+        visitCustomers: parsedRoutes.stats.customers,
+        orphanVisits,
         assignedByPolygon: assignStats.byPolygon,
         assignedByName: assignStats.byName,
         noRegion: assignStats.noRegion,
@@ -271,10 +351,11 @@ adminRouter.post(
 adminRouter.post('/import/confirm', (req, res) => {
   const { importId } = req.body || {};
   const pending = pendingImports.get(importId);
-  if (!pending) return res.status(400).json({ error: 'جلسة الاستيراد انتهت، أعد رفع الملفين' });
+  if (!pending) return res.status(400).json({ error: 'جلسة الاستيراد انتهت، أعد رفع الملفات' });
   pendingImports.delete(importId);
 
   withTransaction(() => {
+    db.exec('DELETE FROM visits');
     db.exec('DELETE FROM stores');
     db.exec('DELETE FROM regions');
     db.exec('DELETE FROM landmarks');
@@ -298,18 +379,27 @@ adminRouter.post('/import/confirm', (req, res) => {
 
     const insertStore = db.prepare(
       `INSERT INTO stores (name, lat, lng, region_id, code, address,
-        b1_rep, b1_channel, b1_day, b2_rep, b2_channel, b2_day, b3_rep, b3_channel, b3_day)
+        account_type, status, map_show, category, shop_class, manager_name, governate, phone, whatsapp)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
+    const storeIdsByCode = new Map();
     for (const s of pending.stores) {
-      insertStore.run(
+      const info = insertStore.run(
         s.name, s.lat, s.lng,
         s.regionName ? regionIds.get(s.regionName) ?? null : null,
         s.code, s.address,
-        s.b1Rep, s.b1Channel, s.b1Day,
-        s.b2Rep, s.b2Channel, s.b2Day,
-        s.b3Rep, s.b3Channel, s.b3Day
+        s.accountType, s.status, s.mapShow, s.category, s.shopClass, s.managerName, s.governate,
+        s.phone, s.whatsapp
       );
+      if (s.code != null) storeIdsByCode.set(s.code, info.lastInsertRowid);
+    }
+
+    const insertVisit = db.prepare(
+      'INSERT INTO visits (store_id, rep_name, invoice_type, visit_day) VALUES (?, ?, ?, ?)'
+    );
+    for (const v of pending.visits) {
+      const storeId = storeIdsByCode.get(v.code);
+      if (storeId != null) insertVisit.run(storeId, v.repName, v.invoiceType, v.visitDay);
     }
   });
   bumpDataVersion();

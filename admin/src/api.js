@@ -64,14 +64,20 @@ export const api = {
     const qs = params.toString();
     return request(`/api/admin/stores${qs ? `?${qs}` : ''}`);
   },
+  getStore: (id) => request(`/api/admin/stores/${id}`),
   createStore: (s) => request('/api/admin/stores', { method: 'POST', body: s }),
   updateStore: (id, s) => request(`/api/admin/stores/${id}`, { method: 'PUT', body: s }),
   deleteStore: (id) => request(`/api/admin/stores/${id}`, { method: 'DELETE' }),
 
-  uploadImportFiles: (kmzFile, xlsxFile) => {
+  addVisit: (storeId, v) => request(`/api/admin/stores/${storeId}/visits`, { method: 'POST', body: v }),
+  updateVisit: (id, v) => request(`/api/admin/visits/${id}`, { method: 'PUT', body: v }),
+  deleteVisit: (id) => request(`/api/admin/visits/${id}`, { method: 'DELETE' }),
+
+  uploadImportFiles: (kmzFile, customersFile, routesFile) => {
     const fd = new FormData();
     fd.append('kmz', kmzFile);
-    fd.append('xlsx', xlsxFile);
+    fd.append('customers', customersFile);
+    fd.append('routes', routesFile);
     return request('/api/admin/import/files', { method: 'POST', formData: fd });
   },
   confirmImport: (importId) => request('/api/admin/import/confirm', { method: 'POST', body: { importId } }),

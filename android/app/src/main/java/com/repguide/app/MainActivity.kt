@@ -125,7 +125,7 @@ class MainActivity : AppCompatActivity() {
         binding.map.controller.setCenter(ALEPPO)
         setupTileProvider()
         storeOverlay = StoresOverlay(binding.map) { store ->
-            StoreDetailSheet.show(supportFragmentManager, store, regionNameOf(store), ::onStoreAction)
+            showStoreDetail(store, regionNameOf(store))
         }
         binding.map.overlays.add(regionOverlay)
         binding.map.overlays.add(storeOverlay)
@@ -379,6 +379,14 @@ class MainActivity : AppCompatActivity() {
     private fun regionNameOf(store: StoreEntity): String =
         store.regionId?.let { regionsById[it]?.name } ?: getString(R.string.no_region)
 
+    /** يجلب زيارات المحل من القاعدة ثم يفتح بطاقة التفاصيل */
+    private fun showStoreDetail(store: StoreEntity, regionName: String) {
+        lifecycleScope.launch {
+            val visits = vm.visitsFor(store.id)
+            StoreDetailSheet.show(supportFragmentManager, store, regionName, ::onStoreAction, visits)
+        }
+    }
+
     private fun onStoreChosen(store: StoreEntity) {
         hideSuggestions()
         hideKeyboard()
@@ -386,7 +394,7 @@ class MainActivity : AppCompatActivity() {
         binding.searchInput.text?.clear()
         binding.regionSpinner.setSelection(0)
         highlightAndZoomTo(store)
-        StoreDetailSheet.show(supportFragmentManager, store, regionNameOf(store), ::onStoreAction)
+        showStoreDetail(store, regionNameOf(store))
     }
 
     private fun highlightAndZoomTo(store: StoreEntity) {
@@ -426,7 +434,7 @@ class MainActivity : AppCompatActivity() {
             items
         ) { store ->
             highlightAndZoomTo(store)
-            StoreDetailSheet.show(supportFragmentManager, store, region.name, ::onStoreAction)
+            showStoreDetail(store, region.name)
         }
     }
 

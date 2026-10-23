@@ -3,6 +3,7 @@ package com.repguide.app.api
 import com.repguide.app.data.LandmarkEntity
 import com.repguide.app.data.RegionEntity
 import com.repguide.app.data.StoreEntity
+import com.repguide.app.data.VisitEntity
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -28,7 +29,8 @@ object ApiClient {
         val version: Int,
         val regions: List<RegionEntity>,
         val stores: List<StoreEntity>,
-        val landmarks: List<LandmarkEntity>
+        val landmarks: List<LandmarkEntity>,
+        val visits: List<VisitEntity>
     )
 
     private fun execute(request: Request, unknownError: String): String {
@@ -157,15 +159,13 @@ object ApiClient {
                     notes = s.str("notes"),
                     code = s.intOrNull("code"),
                     address = s.str("address"),
-                    b1Rep = s.str("b1Rep"),
-                    b1Channel = s.str("b1Channel"),
-                    b1Day = s.str("b1Day"),
-                    b2Rep = s.str("b2Rep"),
-                    b2Channel = s.str("b2Channel"),
-                    b2Day = s.str("b2Day"),
-                    b3Rep = s.str("b3Rep"),
-                    b3Channel = s.str("b3Channel"),
-                    b3Day = s.str("b3Day")
+                    whatsapp = s.str("whatsapp"),
+                    accountType = s.str("accountType"),
+                    status = s.str("status"),
+                    category = s.str("category"),
+                    shopClass = s.str("shopClass"),
+                    managerName = s.str("managerName"),
+                    governate = s.str("governate")
                 )
             )
         }
@@ -185,7 +185,22 @@ object ApiClient {
                 )
             }
         }
-        return Snapshot(json.optInt("version", 0), regions, stores, landmarks)
+        val visitsJson = json.optJSONArray("visits")
+        val visits = ArrayList<VisitEntity>(visitsJson?.length() ?: 0)
+        if (visitsJson != null) {
+            for (i in 0 until visitsJson.length()) {
+                val v = visitsJson.getJSONObject(i)
+                visits.add(
+                    VisitEntity(
+                        storeId = v.getInt("storeId"),
+                        repName = v.str("repName"),
+                        invoiceType = v.str("invoiceType"),
+                        visitDay = v.str("visitDay")
+                    )
+                )
+            }
+        }
+        return Snapshot(json.optInt("version", 0), regions, stores, landmarks, visits)
     }
 
     data class TilesInfo(

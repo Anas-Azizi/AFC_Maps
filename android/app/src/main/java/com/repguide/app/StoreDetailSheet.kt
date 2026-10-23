@@ -1,15 +1,16 @@
 package com.repguide.app
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentManager
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.repguide.app.data.StoreEntity
+import com.repguide.app.data.VisitEntity
 import com.repguide.app.databinding.DialogStoreBinding
 
 class StoreDetailSheet : BottomSheetDialogFragment() {
@@ -28,15 +29,18 @@ class StoreDetailSheet : BottomSheetDialogFragment() {
         private const val ARG_NOTES = "notes"
 
         private var pendingStore: StoreEntity? = null
+        private var pendingVisits: List<VisitEntity> = emptyList()
         private var pendingAction: ((StoreEntity, Int) -> Unit)? = null
 
         fun show(
             fm: FragmentManager,
             store: StoreEntity,
             regionName: String?,
-            onAction: ((StoreEntity, Int) -> Unit)? = null
+            onAction: ((StoreEntity, Int) -> Unit)? = null,
+            visits: List<VisitEntity> = emptyList()
         ) {
             pendingStore = store
+            pendingVisits = visits
             pendingAction = onAction
             StoreDetailSheet().apply {
                 arguments = Bundle().apply {
@@ -68,28 +72,57 @@ class StoreDetailSheet : BottomSheetDialogFragment() {
         val phone = args.getString(ARG_PHONE)
         binding.rowPhone.visibility = if (phone.isNullOrBlank()) View.GONE else View.VISIBLE
         binding.phoneValue.text = phone.orEmpty()
-        binding.callButton.setOnClickListener {
+        val dial = {
             if (!phone.isNullOrBlank()) {
-                startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${phone.trim()}")))
+                try {
+                    startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${phone.trim()}")))
+                } catch (e: ActivityNotFoundException) {
+                    // لا يوجد تطبيق اتصال على الجهاز
+                }
             }
         }
+        binding.callButton.setOnClickListener { dial() }
+        binding.rowPhone.setOnClickListener { dial() }
 
         val region = args.getString(ARG_REGION)
         binding.regionValue.text = region ?: getString(R.string.no_region)
 
-        // الكود والعنوان والسلات من الكيان مباشرة
+        // بقية الحقول من الكيان مباشرة — يظهر كل صف فقط إن وُجدت قيمته
         val store2 = pendingStore
+        fun bindRow(row: View, valueView: android.widget.TextView, value: String?) {
+            if (value.isNullOrBlank()) {
+                row.visibility = View.GONE
+            } else {
+                valueView.text = value
+            }
+        }
         if (store2?.code != null) {
             binding.codeValue.text = store2.code.toString()
         } else {
             binding.rowCode.visibility = View.GONE
         }
-        if (!store2?.address.isNullOrBlank()) {
-            binding.addressValue.text = store2?.address
-        } else {
-            binding.rowAddress.visibility = View.GONE
+        bindRow(binding.rowAccountType, binding.accountTypeValue, store2?.accountType)
+        bindRow(binding.rowStatus, binding.statusValue, store2?.status)
+        bindRow(binding.rowCategory, binding.categoryValue, store2?.category)
+        bindRow(binding.rowShopClass, binding.shopClassValue, store2?.shopClass)
+        bindRow(binding.rowManager, binding.managerValue, store2?.managerName)
+        bindRow(binding.rowGovernate, binding.governateValue, store2?.governate)
+        bindRow(binding.rowAddress, binding.addressValue, store2?.address)
+
+        val whatsapp = store2?.whatsapp
+        bindRow(binding.rowWhatsapp, binding.whatsappValue, whatsapp)
+        binding.rowWhatsapp.setOnClickListener {
+            val digits = whatsappToInternational(whatsapp)
+            if (digits.isNotEmpty()) {
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$digits")))
+                } catch (e: ActivityNotFoundException) {
+                    // لا يوجد متصفح/واتساب على الجهاز
+                }
+            }
         }
-        if (store2 != null) buildBasketRows(binding, store2)
+
+        buildVisitsRows(binding, pendingVisits)
 
         val notes = args.getString(ARG_NOTES)
         binding.rowNotes.visibility = if (notes.isNullOrBlank()) View.GONE else View.VISIBLE
@@ -124,47 +157,47 @@ class StoreDetailSheet : BottomSheetDialogFragment() {
         return binding.root
     }
 
-    /** يبني أقسام السلات الثلاث — يظهر القسم فقط إن وُجدت بياناته */
-    private fun buildBasketRows(binding: DialogStoreBinding, store: StoreEntity) {
+    /** أرقام فقط؛ الرقم المحلي الذي يبدأ بـ 0 يُحوَّل إلى الصيغة الدولية بمفتاح سوريا 963 */
+    private fun whatsappToInternational(raw: String?): String {
+        var digits = raw.orEmpty().filter { it.isDigit() }
+        if (digits.startsWith("0")) digits = "963" + digits.drop(1)
+        return digits
+    }
+
+    /** سطر لكل زيارة: المندوب — نوع الفاتورة — يوم الزيارة (تُتخطى الأجزاء الفارغة) */
+    private fun buildVisitsRows(binding: DialogStoreBinding, visits: List<VisitEntity>) {
         val ctx = requireContext()
         val density = resources.displayMetrics.density
-        val baskets = listOf(
-            Triple(store.b1Rep, store.b1Channel, store.b1Day),
-            Triple(store.b2Rep, store.b2Channel, store.b2Day),
-            Triple(store.b3Rep, store.b3Channel, store.b3Day)
-        )
-        baskets.forEachIndexed { index, (rep, channel, day) ->
-            if (rep.isNullOrBlank() && channel.isNullOrBlank() && day.isNullOrBlank()) return@forEachIndexed
-
-            val title = android.widget.TextView(ctx).apply {
-                text = getString(R.string.basket_title, index + 1)
-                setTypeface(null, android.graphics.Typeface.BOLD)
-                textSize = 15f
-                setTextColor(ContextCompat.getColor(ctx, com.google.android.material.R.color.material_on_surface_emphasis_high_type))
-                setPadding(0, (10 * density).toInt(), 0, (4 * density).toInt())
-            }
-            binding.basketsContainer.addView(title)
-
-            val fields = listOf(
-                getString(R.string.salesperson) to rep,
-                getString(R.string.classification) to channel,
-                getString(R.string.visit_day) to day
+        var added = 0
+        for (visit in visits) {
+            val parts = listOfNotNull(
+                visit.repName?.takeIf { it.isNotBlank() },
+                visit.invoiceType?.takeIf { it.isNotBlank() },
+                visit.visitDay?.takeIf { it.isNotBlank() }
             )
-            for ((label, value) in fields) {
-                if (value.isNullOrBlank()) continue
-                val row = android.widget.TextView(ctx).apply {
-                    text = "$label $value"
-                    textSize = 14f
-                    setPadding((12 * density).toInt(), (2 * density).toInt(), 0, (2 * density).toInt())
-                }
-                binding.basketsContainer.addView(row)
+            if (parts.isEmpty()) continue
+            val row = android.widget.TextView(ctx).apply {
+                text = parts.joinToString(" — ")
+                textSize = 14f
+                setPadding((12 * density).toInt(), (2 * density).toInt(), 0, (2 * density).toInt())
             }
+            binding.visitsContainer.addView(row)
+            added++
+        }
+        if (added == 0) {
+            val empty = android.widget.TextView(ctx).apply {
+                text = getString(R.string.no_visits)
+                textSize = 14f
+                setPadding((12 * density).toInt(), (2 * density).toInt(), 0, (2 * density).toInt())
+            }
+            binding.visitsContainer.addView(empty)
         }
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
         pendingStore = null
+        pendingVisits = emptyList()
         pendingAction = null
     }
 }

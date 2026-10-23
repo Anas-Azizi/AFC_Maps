@@ -5,18 +5,23 @@ import { api } from '../api.js';
 
 const ALEPPO = [36.2, 37.13];
 
+const EMPTY_FORM = {
+  name: '', code: '', address: '', accountType: '', status: '', mapShow: true,
+  category: '', shopClass: '', managerName: '', governate: '',
+  phone: '', whatsapp: '', regionId: '', notes: '',
+};
+
+const EMPTY_VISIT = { repName: '', invoiceType: '', visitDay: '' };
+const DAYS = ['السبت', 'الاحد', 'الاثنين', 'الثلاثاء', 'الاربعاء', 'الخميس', 'الجمعة'];
+
 export default function StoreEdit() {
   const { id } = useParams();
   const isNew = !id;
   const navigate = useNavigate();
 
-  const [form, setForm] = useState({
-    name: '',
-    ownerName: '',
-    phone: '',
-    regionId: '',
-    notes: '',
-  });
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [visits, setVisits] = useState([]);
+  const [newVisit, setNewVisit] = useState(EMPTY_VISIT);
   const [pos, setPos] = useState(null);
   const [regions, setRegions] = useState([]);
   const [loading, setLoading] = useState(!isNew);
@@ -28,36 +33,36 @@ export default function StoreEdit() {
   const markerRef = useRef(null);
   const contextLayersRef = useRef(null);
 
-  // تحميل المناطق
   useEffect(() => {
     api.listRegions().then(setRegions).catch((e) => setError(e.message));
   }, []);
 
-  // تحميل بيانات المحل عند التعديل
+  // تحميل بيانات الزبون عند التعديل
   useEffect(() => {
     if (isNew) return;
-    // لا يوجد endpoint لمحل واحد؛ نبحث ضمن القائمة
-    api.listStores({})
-      .then(async (stores) => {
-        let store = stores.find((s) => s.id === Number(id));
-        if (!store) {
-          // قد لا يظهر ضمن أول 500 — نجلب snapshot الكامل
-          const snap = await api.snapshot();
-          store = snap.stores.find((s) => s.id === Number(id));
-        }
-        if (!store) {
-          setError('المحل غير موجود');
-          return;
-        }
+    api.getStore(Number(id))
+      .then((store) => {
         setForm({
           name: store.name || '',
-          ownerName: store.ownerName || '',
+          code: store.code ?? '',
+          address: store.address || '',
+          accountType: store.accountType || '',
+          status: store.status || '',
+          mapShow: !!store.mapShow,
+          category: store.category || '',
+          shopClass: store.shopClass || '',
+          managerName: store.managerName || '',
+          governate: store.governate || '',
           phone: store.phone || '',
+          whatsapp: store.whatsapp || '',
           regionId: store.regionId || '',
           notes: store.notes || '',
         });
-        setPos([store.lat, store.lng]);
-        mapInstanceRef.current?.setView([store.lat, store.lng], 15);
+        setVisits(store.visits || []);
+        if (store.lat != null && store.lng != null) {
+          setPos([store.lat, store.lng]);
+          mapInstanceRef.current?.setView([store.lat, store.lng], 15);
+        }
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -86,7 +91,7 @@ export default function StoreEdit() {
     };
   }, []);
 
-  // علامة موقع المحل
+  // علامة موقع الزبون
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
@@ -104,7 +109,7 @@ export default function StoreEdit() {
     }
   }, [pos]);
 
-  // عرض محلات المنطقة المحددة كنقاط للسياق
+  // عرض زبائن المنطقة المحددة كنقاط للسياق
   useEffect(() => {
     const group = contextLayersRef.current;
     if (!group || !form.regionId) {
@@ -116,6 +121,7 @@ export default function StoreEdit() {
         group.clearLayers();
         for (const s of stores) {
           if (String(s.id) === String(id)) continue;
+          if (s.lat == null || s.lng == null) continue;
           L.circleMarker([s.lat, s.lng], {
             radius: 5,
             color: '#2563eb',
@@ -133,24 +139,42 @@ export default function StoreEdit() {
   const onSave = async (e) => {
     e.preventDefault();
     setError('');
-    if (!pos) {
-      setError('حدد موقع المحل بالنقر على الخريطة');
+    if (isNew && !pos) {
+      setError('حدد موقع الزبون بالنقر على الخريطة');
       return;
     }
     setBusy(true);
     try {
       const payload = {
         name: form.name,
-        ownerName: form.ownerName || null,
+        address: form.address || null,
+        accountType: form.accountType || null,
+        status: form.status || null,
+        mapShow: form.mapShow,
+        category: form.category || null,
+        shopClass: form.shopClass || null,
+        managerName: form.managerName || null,
+        governate: form.governate || null,
         phone: form.phone || null,
-        lat: pos[0],
-        lng: pos[1],
+        whatsapp: form.whatsapp || null,
         regionId: form.regionId ? Number(form.regionId) : null,
         notes: form.notes || null,
       };
-      if (isNew) await api.createStore(payload);
-      else await api.updateStore(Number(id), payload);
-      navigate('/stores');
+      if (form.code !== '' && /^\d+$/.test(String(form.code))) payload.code = Number(form.code);
+      if (pos) {
+        payload.lat = pos[0];
+        payload.lng = pos[1];
+      } else if (isNew) {
+        payload.lat = null;
+        payload.lng = null;
+      }
+      if (isNew) {
+        const created = await api.createStore(payload);
+        navigate(`/stores/${created.id}/edit`);
+      } else {
+        await api.updateStore(Number(id), payload);
+        navigate('/stores');
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -158,19 +182,55 @@ export default function StoreEdit() {
     }
   };
 
+  const onAddVisit = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (!newVisit.repName.trim()) {
+      setError('اسم المندوب مطلوب لإضافة زيارة');
+      return;
+    }
+    try {
+      await api.addVisit(Number(id), {
+        repName: newVisit.repName.trim(),
+        invoiceType: newVisit.invoiceType || null,
+        visitDay: newVisit.visitDay || null,
+      });
+      setNewVisit(EMPTY_VISIT);
+      const store = await api.getStore(Number(id));
+      setVisits(store.visits || []);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const onDeleteVisit = async (visitId) => {
+    if (!window.confirm('حذف هذه الزيارة؟')) return;
+    setError('');
+    try {
+      await api.deleteVisit(visitId);
+      setVisits(visits.filter((v) => v.id !== visitId));
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   if (loading) return <p>جارٍ التحميل…</p>;
 
   return (
     <div>
-      <h1>{isNew ? 'إضافة محل جديد' : `تعديل المحل: ${form.name}`}</h1>
+      <h1>{isNew ? 'إضافة زبون جديد' : `تعديل الزبون: ${form.name}`}</h1>
       {error && <div className="alert alert-error">{error}</div>}
 
       <div className="card">
         <form onSubmit={onSave}>
           <div className="form-grid">
             <div className="form-field">
-              <label>اسم المحل</label>
+              <label>اسم الزبون</label>
               <input type="text" value={form.name} onChange={set('name')} required />
+            </div>
+            <div className="form-field">
+              <label>كود الزبون</label>
+              <input type="text" value={form.code} onChange={set('code')} />
             </div>
             <div className="form-field">
               <label>المنطقة</label>
@@ -182,12 +242,54 @@ export default function StoreEdit() {
               </select>
             </div>
             <div className="form-field">
-              <label>اسم المالك</label>
-              <input type="text" value={form.ownerName} onChange={set('ownerName')} />
+              <label>المحافظة</label>
+              <input type="text" value={form.governate} onChange={set('governate')} />
             </div>
             <div className="form-field">
-              <label>الهاتف</label>
+              <label>نوع الحساب</label>
+              <input type="text" value={form.accountType} onChange={set('accountType')} />
+            </div>
+            <div className="form-field">
+              <label>حالة الزبون</label>
+              <select value={form.status} onChange={set('status')}>
+                <option value="">فعّال</option>
+                <option value="cancelled">cancelled</option>
+              </select>
+            </div>
+            <div className="form-field">
+              <label>طبيعة العمل</label>
+              <input type="text" value={form.category} onChange={set('category')} />
+            </div>
+            <div className="form-field">
+              <label>الفئة</label>
+              <input type="text" value={form.shopClass} onChange={set('shopClass')} />
+            </div>
+            <div className="form-field">
+              <label>اسم المسؤول</label>
+              <input type="text" value={form.managerName} onChange={set('managerName')} />
+            </div>
+            <div className="form-field">
+              <label>العنوان</label>
+              <input type="text" value={form.address} onChange={set('address')} />
+            </div>
+            <div className="form-field">
+              <label>رقم الموبايل</label>
               <input type="text" value={form.phone} onChange={set('phone')} />
+            </div>
+            <div className="form-field">
+              <label>رقم الواتس</label>
+              <input type="text" value={form.whatsapp} onChange={set('whatsapp')} />
+            </div>
+            <div className="form-field">
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={form.mapShow}
+                  onChange={(e) => setForm({ ...form, mapShow: e.target.checked })}
+                  style={{ width: 'auto' }}
+                />
+                يظهر في التطبيق (MapShow)
+              </label>
             </div>
             <div className="form-field" style={{ gridColumn: '1 / -1' }}>
               <label>ملاحظات</label>
@@ -196,8 +298,8 @@ export default function StoreEdit() {
           </div>
 
           <p className="muted">
-            انقر على الخريطة لتحديد موقع المحل. النقاط الزرقاء هي محلات المنطقة المحددة.
-            {pos && <> الموقع الحالي: {pos[0].toFixed(5)}, {pos[1].toFixed(5)}</>}
+            انقر على الخريطة لتحديد موقع الزبون. النقاط الزرقاء هي زبائن المنطقة المحددة.
+            {pos ? <> الموقع الحالي: {pos[0].toFixed(5)}, {pos[1].toFixed(5)}</> : <> لا يوجد موقع محدد — لن يظهر دبوس على الخريطة.</>}
           </p>
           <div ref={mapRef} className="map-container" style={{ marginBottom: 16 }} />
 
@@ -211,6 +313,69 @@ export default function StoreEdit() {
           </div>
         </form>
       </div>
+
+      {!isNew && (
+        <div className="card">
+          <h2>زيارات المندوبين</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>المندوب</th>
+                <th>نوع الفاتورة</th>
+                <th>يوم الزيارة</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {visits.map((v) => (
+                <tr key={v.id}>
+                  <td>{v.repName}</td>
+                  <td>{v.invoiceType || '—'}</td>
+                  <td>{v.visitDay || '—'}</td>
+                  <td>
+                    <button className="btn btn-danger btn-small" onClick={() => onDeleteVisit(v.id)}>حذف</button>
+                  </td>
+                </tr>
+              ))}
+              {visits.length === 0 && (
+                <tr><td colSpan="4" className="muted">لا توجد زيارات مسجلة</td></tr>
+              )}
+            </tbody>
+          </table>
+
+          <form className="filters-row" onSubmit={onAddVisit} style={{ marginTop: 12 }}>
+            <div className="form-field">
+              <label>المندوب</label>
+              <input
+                type="text"
+                value={newVisit.repName}
+                onChange={(e) => setNewVisit({ ...newVisit, repName: e.target.value })}
+              />
+            </div>
+            <div className="form-field">
+              <label>نوع الفاتورة</label>
+              <input
+                type="text"
+                value={newVisit.invoiceType}
+                onChange={(e) => setNewVisit({ ...newVisit, invoiceType: e.target.value })}
+              />
+            </div>
+            <div className="form-field">
+              <label>يوم الزيارة</label>
+              <select
+                value={newVisit.visitDay}
+                onChange={(e) => setNewVisit({ ...newVisit, visitDay: e.target.value })}
+              >
+                <option value="">—</option>
+                {DAYS.map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            </div>
+            <button className="btn btn-primary" type="submit">إضافة زيارة</button>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

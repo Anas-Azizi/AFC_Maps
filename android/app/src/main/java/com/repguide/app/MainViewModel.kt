@@ -10,6 +10,7 @@ import com.repguide.app.data.PendingSubmissionEntity
 import com.repguide.app.data.PendingUpdateEntity
 import com.repguide.app.data.RegionEntity
 import com.repguide.app.data.StoreEntity
+import com.repguide.app.data.VisitEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -63,7 +64,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 }
                 withContext(Dispatchers.IO) {
-                    dao.replaceAll(snapshot.regions, snapshot.stores, snapshot.landmarks)
+                    dao.replaceAll(snapshot.regions, snapshot.stores, snapshot.landmarks, snapshot.visits)
                     Prefs.setDataVersion(ctx, snapshot.version)
                 }
                 _state.update {
@@ -233,4 +234,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun clearAllData() {
         withContext(Dispatchers.IO) { dao.clearAll() }
     }
+
+    suspend fun visitsFor(storeId: Int): List<VisitEntity> =
+        withContext(Dispatchers.IO) { dao.visitsForStore(storeId) }
 }

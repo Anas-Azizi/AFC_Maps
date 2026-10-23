@@ -50,7 +50,7 @@ export default function Stores() {
 
   return (
     <div>
-      <h1>المحلات</h1>
+      <h1>الزبائن</h1>
       {error && <div className="alert alert-error">{error}</div>}
 
       <div className="card">
@@ -73,11 +73,11 @@ export default function Stores() {
             </select>
           </div>
           <div className="form-field">
-            <label>بحث بالاسم</label>
+            <label>بحث بالاسم أو الكود</label>
             <input type="text" value={qInput} onChange={(e) => setQInput(e.target.value)} />
           </div>
           <button className="btn btn-secondary" type="submit">بحث</button>
-          <Link to="/stores/new" className="btn btn-primary">إضافة محل جديد</Link>
+          <Link to="/stores/new" className="btn btn-primary">إضافة زبون جديد</Link>
         </form>
 
         {loading ? (
@@ -88,20 +88,34 @@ export default function Stores() {
             <table>
               <thead>
                 <tr>
+                  <th>الكود</th>
                   <th>الاسم</th>
                   <th>المنطقة</th>
-                  <th>المالك</th>
-                  <th>الهاتف</th>
+                  <th>الموبايل</th>
+                  <th>الحالة</th>
+                  <th>يظهر بالتطبيق</th>
                   <th>إجراءات</th>
                 </tr>
               </thead>
               <tbody>
                 {stores.map((s) => (
                   <tr key={s.id}>
+                    <td>{s.code ?? '—'}</td>
                     <td>{s.name}</td>
                     <td>{regionName(s.regionId)}</td>
-                    <td>{s.ownerName || '—'}</td>
                     <td>{s.phone || '—'}</td>
+                    <td>
+                      {s.status ? (
+                        <span className="badge badge-gray">{s.status}</span>
+                      ) : (
+                        <span className="badge badge-green">فعّال</span>
+                      )}
+                    </td>
+                    <td>
+                      <span className={`badge ${s.mapShow ? 'badge-green' : 'badge-gray'}`}>
+                        {s.mapShow ? 'نعم' : 'لا'}
+                      </span>
+                    </td>
                     <td>
                       <div className="btn-row">
                         <Link to={`/stores/${s.id}/edit`} className="btn btn-secondary btn-small">تعديل</Link>
@@ -111,7 +125,7 @@ export default function Stores() {
                   </tr>
                 ))}
                 {stores.length === 0 && (
-                  <tr><td colSpan="5" className="muted">لا توجد نتائج</td></tr>
+                  <tr><td colSpan="7" className="muted">لا توجد نتائج</td></tr>
                 )}
               </tbody>
             </table>

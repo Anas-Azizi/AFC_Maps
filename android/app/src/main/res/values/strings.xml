@@ -25,7 +25,7 @@
     <string name="save">حفظ</string>
     <string name="cancel">إلغاء</string>
     <string name="owner_name">صاحب المحل</string>
-    <string name="phone">الهاتف</string>
+    <string name="phone">الموبايل</string>
     <string name="region">المنطقة</string>
     <string name="notes">ملاحظات</string>
     <string name="call">اتصال</string>
@@ -74,8 +74,14 @@
     <string name="store_no_coords">لا تتوفر إحداثيات لهذا الزبون بعد</string>
     <string name="customer_code">الكود:</string>
     <string name="address">العنوان:</string>
-    <string name="basket_title">السلة %1$d</string>
-    <string name="salesperson">المندوب:</string>
-    <string name="classification">التصنيف:</string>
-    <string name="visit_day">يوم الزيارة:</string>
+    <string name="whatsapp">الواتس</string>
+    <string name="governate">المحافظة</string>
+    <string name="account_type">نوع الحساب</string>
+    <string name="status">الحالة</string>
+    <string name="category">طبيعة العمل</string>
+    <string name="shop_class">الفئة</string>
+    <string name="manager_name">اسم المسؤول</string>
+    <string name="visits_title">زيارات المندوبين</string>
+    <string name="no_visits">لا توجد زيارات مسجلة</string>
+    <string name="invoice_type">نوع الفاتورة</string>
 </resources>

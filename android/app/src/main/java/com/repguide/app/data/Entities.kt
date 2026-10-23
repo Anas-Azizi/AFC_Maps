@@ -25,15 +25,22 @@ data class StoreEntity(
     val notes: String?,
     val code: Int?,
     val address: String?,
-    val b1Rep: String?,
-    val b1Channel: String?,
-    val b1Day: String?,
-    val b2Rep: String?,
-    val b2Channel: String?,
-    val b2Day: String?,
-    val b3Rep: String?,
-    val b3Channel: String?,
-    val b3Day: String?
+    val whatsapp: String?,
+    val accountType: String?,
+    val status: String?,
+    val category: String?,
+    val shopClass: String?,
+    val managerName: String?,
+    val governate: String?
+)
+
+@Entity(tableName = "visits")
+data class VisitEntity(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val storeId: Int,
+    val repName: String?,
+    val invoiceType: String?,
+    val visitDay: String?
 )
 
 @Entity(tableName = "landmarks")

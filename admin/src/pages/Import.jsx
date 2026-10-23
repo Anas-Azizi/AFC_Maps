@@ -3,25 +3,33 @@ import { api } from '../api.js';
 
 export default function Import() {
   const kmzRef = useRef(null);
-  const xlsxRef = useRef(null);
+  const customersRef = useRef(null);
+  const routesRef = useRef(null);
   const [preview, setPreview] = useState(null);
   const [done, setDone] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+
+  const clearInputs = () => {
+    if (kmzRef.current) kmzRef.current.value = '';
+    if (customersRef.current) customersRef.current.value = '';
+    if (routesRef.current) routesRef.current.value = '';
+  };
 
   const onUpload = async (e) => {
     e.preventDefault();
     setError('');
     setDone(false);
     const kmz = kmzRef.current?.files?.[0];
-    const xlsx = xlsxRef.current?.files?.[0];
-    if (!kmz || !xlsx) {
-      setError('اختر ملفي KMZ و Excel معاً');
+    const customers = customersRef.current?.files?.[0];
+    const routes = routesRef.current?.files?.[0];
+    if (!kmz || !customers || !routes) {
+      setError('اختر الملفات الثلاثة معاً: KMZ + الزبائن + المسارات');
       return;
     }
     setBusy(true);
     try {
-      const data = await api.uploadImportFiles(kmz, xlsx);
+      const data = await api.uploadImportFiles(kmz, customers, routes);
       setPreview(data);
     } catch (err) {
       setError(err.message);
@@ -32,15 +40,14 @@ export default function Import() {
 
   const onConfirm = async () => {
     if (!preview) return;
-    if (!window.confirm('سيتم مسح جميع البيانات الحالية (المناطق والمحلات والمعالم) واستيراد البيانات الجديدة. هل أنت متأكد؟')) return;
+    if (!window.confirm('سيتم مسح جميع البيانات الحالية (المناطق والزبائن والزيارات والمعالم) واستيراد البيانات الجديدة. هل أنت متأكد؟')) return;
     setError('');
     setBusy(true);
     try {
       await api.confirmImport(preview.importId);
       setDone(true);
       setPreview(null);
-      if (kmzRef.current) kmzRef.current.value = '';
-      if (xlsxRef.current) xlsxRef.current.value = '';
+      clearInputs();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -50,8 +57,7 @@ export default function Import() {
 
   const onCancel = () => {
     setPreview(null);
-    if (kmzRef.current) kmzRef.current.value = '';
-    if (xlsxRef.current) xlsxRef.current.value = '';
+    clearInputs();
   };
 
   return (
@@ -72,8 +78,12 @@ export default function Import() {
               <input ref={kmzRef} type="file" accept=".kmz" />
             </div>
             <div className="form-field" style={{ maxWidth: 400, marginBottom: 14 }}>
-              <label>ملف Excel (المحلات: الكود، الاسم، المنطقة، العنوان، الإحداثيات، السلات)</label>
-              <input ref={xlsxRef} type="file" accept=".xlsx" />
+              <label>ملف الزبائن Excel (Qry_Upload_Guid_Customers)</label>
+              <input ref={customersRef} type="file" accept=".xlsx" />
+            </div>
+            <div className="form-field" style={{ maxWidth: 400, marginBottom: 14 }}>
+              <label>ملف المسارات Excel (Qry_Upload_Guide_Routes)</label>
+              <input ref={routesRef} type="file" accept=".xlsx" />
             </div>
             <button className="btn btn-primary" type="submit" disabled={busy}>
               {busy ? 'جارٍ الرفع…' : 'رفع ومعاينة'}
@@ -89,15 +99,19 @@ export default function Import() {
             <div className="stats-grid" style={{ marginBottom: 16 }}>
               <div className="stat-card">
                 <div className="stat-value">{preview.stats.stores}</div>
-                <div className="stat-label">المحلات</div>
+                <div className="stat-label">الزبائن</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-value">{preview.stats.mapShown}</div>
+                <div className="stat-label">ظاهرون في التطبيق</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-value">{preview.stats.visits}</div>
+                <div className="stat-label">الزيارات</div>
               </div>
               <div className="stat-card">
                 <div className="stat-value">{preview.stats.regions}</div>
                 <div className="stat-label">المناطق</div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-value">{preview.stats.polygons}</div>
-                <div className="stat-label">مضلعات الحدود</div>
               </div>
               <div className="stat-card">
                 <div className="stat-value">{preview.stats.landmarks}</div>
@@ -109,9 +123,19 @@ export default function Import() {
               تعيين المناطق: {preview.stats.assignedByPolygon} مكانياً (داخل المضلع) + {preview.stats.assignedByName} بمطابقة الاسم
               {preview.stats.noRegion > 0 && ` — ${preview.stats.noRegion} بلا منطقة`}
             </div>
+            {preview.stats.cancelled > 0 && (
+              <div className="alert alert-warning" style={{ marginBottom: 8 }}>
+                {preview.stats.cancelled} زبون ملغى (cancelled) — سيُستوردون لكن لن يظهروا في التطبيق إلا إذا كان MapShow مفعلاً.
+              </div>
+            )}
             {preview.stats.storesNoCoords > 0 && (
-              <div className="alert alert-warning">
-                تنبيه: {preview.stats.storesNoCoords} محلاً بلا إحداثيات صالحة — سيظهرون في البحث والقوائم دون دبوس على الخريطة.
+              <div className="alert alert-warning" style={{ marginBottom: 8 }}>
+                تنبيه: {preview.stats.storesNoCoords} زبوناً بلا إحداثيات صالحة — سيظهرون في البحث والقوائم دون دبوس على الخريطة.
+              </div>
+            )}
+            {preview.stats.orphanVisits > 0 && (
+              <div className="alert alert-error">
+                تجاهل {preview.stats.orphanVisits} زيارة لأكواد زبائن غير موجودة في ملف الزبائن.
               </div>
             )}
 
@@ -119,7 +143,7 @@ export default function Import() {
               <thead>
                 <tr>
                   <th>المنطقة</th>
-                  <th>عدد المحلات</th>
+                  <th>عدد الزبائن</th>
                   <th>المضلع</th>
                 </tr>
               </thead>
@@ -142,7 +166,7 @@ export default function Import() {
           <div className="card">
             <h2>تأكيد الاستيراد</h2>
             <p className="muted" style={{ marginBottom: 16 }}>
-              سيستبدل هذا الإجراء كل المناطق والمحلات والمعالم الحالية بالبيانات الجديدة.
+              سيستبدل هذا الإجراء كل المناطق والزبائن والزيارات والمعالم الحالية بالبيانات الجديدة.
             </p>
             <div className="btn-row">
               <button className="btn btn-primary" onClick={onConfirm} disabled={busy}>
@@ -152,7 +176,7 @@ export default function Import() {
                 إلغاء
               </button>
             </div>
-            <p className="muted" style={{ marginTop: 12 }}>ملاحظة: تنتهي صلاحية جلسة الاستيراد بعد 10 دقائق من رفع الملفين.</p>
+            <p className="muted" style={{ marginTop: 12 }}>ملاحظة: تنتهي صلاحية جلسة الاستيراد بعد 10 دقائق من رفع الملفات.</p>
           </div>
         </>
       )}
