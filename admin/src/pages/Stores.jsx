@@ -38,7 +38,7 @@ export default function Stores() {
   };
 
   const remove = async (s) => {
-    if (!window.confirm(`هل أنت متأكد من حذف المحل «${s.name}»؟`)) return;
+    if (!window.confirm(`هل أنت متأكد من حذف الزبون «${s.name}»؟`)) return;
     setError('');
     try {
       await api.deleteStore(s.id);
@@ -47,6 +47,21 @@ export default function Stores() {
       setError(err.message);
     }
   };
+
+  const toggleMapShow = async (s) => {
+    setError('');
+    const next = !s.mapShow;
+    setStores(stores.map((x) => (x.id === s.id ? { ...x, mapShow: next ? 1 : 0 } : x)));
+    try {
+      await api.updateStore(s.id, { mapShow: next });
+    } catch (err) {
+      setStores(stores);
+      setError(err.message);
+    }
+  };
+
+  const dash = (v) => (v === null || v === undefined || v === '' ? '—' : v);
+  const coord = (v) => (v == null ? '—' : Number(v).toFixed(6));
 
   return (
     <div>
@@ -85,25 +100,34 @@ export default function Stores() {
         ) : (
           <>
             <p className="muted">عدد النتائج: {stores.length}{stores.length >= 500 ? ' (الحد الأقصى 500 — استخدم البحث للتضييق)' : ''}</p>
+            <div className="table-wrap">
             <table>
               <thead>
                 <tr>
                   <th>الكود</th>
-                  <th>الاسم</th>
-                  <th>المنطقة</th>
-                  <th>الموبايل</th>
+                  <th>اسم الزبون</th>
+                  <th>نوع الحساب</th>
                   <th>الحالة</th>
                   <th>يظهر بالتطبيق</th>
+                  <th>طبيعة العمل</th>
+                  <th>الفئة</th>
+                  <th>اسم المسؤول</th>
+                  <th>المحافظة</th>
+                  <th>المنطقة</th>
+                  <th>العنوان</th>
+                  <th>الموبايل</th>
+                  <th>الواتس</th>
+                  <th>Latitude</th>
+                  <th>Longitude</th>
                   <th>إجراءات</th>
                 </tr>
               </thead>
               <tbody>
                 {stores.map((s) => (
                   <tr key={s.id}>
-                    <td>{s.code ?? '—'}</td>
+                    <td>{dash(s.code)}</td>
                     <td>{s.name}</td>
-                    <td>{regionName(s.regionId)}</td>
-                    <td>{s.phone || '—'}</td>
+                    <td>{dash(s.accountType)}</td>
                     <td>
                       {s.status ? (
                         <span className="badge badge-gray">{s.status}</span>
@@ -112,10 +136,23 @@ export default function Stores() {
                       )}
                     </td>
                     <td>
-                      <span className={`badge ${s.mapShow ? 'badge-green' : 'badge-gray'}`}>
-                        {s.mapShow ? 'نعم' : 'لا'}
-                      </span>
+                      <input
+                        type="checkbox"
+                        checked={!!s.mapShow}
+                        onChange={() => toggleMapShow(s)}
+                        title="إظهار/إخفاء في التطبيق"
+                      />
                     </td>
+                    <td>{dash(s.category)}</td>
+                    <td>{dash(s.shopClass)}</td>
+                    <td>{dash(s.managerName)}</td>
+                    <td>{dash(s.governate)}</td>
+                    <td>{regionName(s.regionId)}</td>
+                    <td>{dash(s.address)}</td>
+                    <td>{dash(s.phone)}</td>
+                    <td>{dash(s.whatsapp)}</td>
+                    <td>{coord(s.lat)}</td>
+                    <td>{coord(s.lng)}</td>
                     <td>
                       <div className="btn-row">
                         <Link to={`/stores/${s.id}/edit`} className="btn btn-secondary btn-small">تعديل</Link>
@@ -125,10 +162,11 @@ export default function Stores() {
                   </tr>
                 ))}
                 {stores.length === 0 && (
-                  <tr><td colSpan="7" className="muted">لا توجد نتائج</td></tr>
+                  <tr><td colSpan="16" className="muted">لا توجد نتائج</td></tr>
                 )}
               </tbody>
             </table>
+            </div>
           </>
         )}
       </div>
