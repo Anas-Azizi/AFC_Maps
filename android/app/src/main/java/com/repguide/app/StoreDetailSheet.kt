@@ -179,7 +179,7 @@ class StoreDetailSheet : BottomSheetDialogFragment() {
             val row = android.widget.TextView(ctx).apply {
                 text = parts.joinToString(" — ")
                 textSize = 14f
-                setPadding((12 * density).toInt(), (2 * density).toInt(), 0, (2 * density).toInt())
+                setPaddingRelative((12 * density).toInt(), (2 * density).toInt(), 0, (2 * density).toInt())
             }
             binding.visitsContainer.addView(row)
             added++
@@ -188,7 +188,7 @@ class StoreDetailSheet : BottomSheetDialogFragment() {
             val empty = android.widget.TextView(ctx).apply {
                 text = getString(R.string.no_visits)
                 textSize = 14f
-                setPadding((12 * density).toInt(), (2 * density).toInt(), 0, (2 * density).toInt())
+                setPaddingRelative((12 * density).toInt(), (2 * density).toInt(), 0, (2 * density).toInt())
             }
             binding.visitsContainer.addView(empty)
         }
