@@ -57,12 +57,54 @@ export const api = {
   updateRegion: (id, r) => request(`/api/admin/regions/${id}`, { method: 'PUT', body: r }),
   deleteRegion: (id) => request(`/api/admin/regions/${id}`, { method: 'DELETE' }),
 
-  listStores: ({ regionId, q } = {}) => {
+  listStores: (filters = {}) => {
     const params = new URLSearchParams();
-    if (regionId) params.set('regionId', regionId);
-    if (q) params.set('q', q);
+    for (const [key, value] of Object.entries(filters)) {
+      if (value === undefined || value === null || value === '') continue;
+      params.set(key, value);
+    }
     const qs = params.toString();
     return request(`/api/admin/stores${qs ? `?${qs}` : ''}`);
+  },
+  filterOptions: () => request('/api/admin/stores/filter-options'),
+  exportStores: async (filters = {}) => {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(filters)) {
+      if (value === undefined || value === null || value === '') continue;
+      params.set(key, value);
+    }
+    const qs = params.toString();
+    const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+    const token = getToken();
+    const res = await fetch(`${base}/api/admin/stores/export${qs ? `?${qs}` : ''}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      let data = null;
+      try {
+        data = await res.json();
+      } catch {
+        // استجابة غير JSON
+      }
+      throw new ApiError(data?.error || `خطأ في التصدير (${res.status})`, res.status);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'customers.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
+  reportDimensions: () => request('/api/admin/reports/dimensions'),
+  pivotReport: ({ rows, cols, metric } = {}) => {
+    const params = new URLSearchParams();
+    if (rows) params.set('rows', rows);
+    if (cols) params.set('cols', cols);
+    if (metric) params.set('metric', metric);
+    return request(`/api/admin/reports/pivot?${params.toString()}`);
   },
   getStore: (id) => request(`/api/admin/stores/${id}`),
   createStore: (s) => request('/api/admin/stores', { method: 'POST', body: s }),

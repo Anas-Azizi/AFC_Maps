@@ -119,19 +119,111 @@ const STORE_COLS = `id, name, owner_name AS ownerName, phone, whatsapp, lat, lng
   region_id AS regionId, notes, code, address, account_type AS accountType, status,
   map_show AS mapShow, category, shop_class AS shopClass, manager_name AS managerName, governate`;
 
-adminRouter.get('/stores', (req, res) => {
-  const { regionId, q } = req.query;
-  let sql = `SELECT ${STORE_COLS} FROM stores`;
+/** يبني شروط الفلترة المشتركة بين اللائحة والتصدير */
+function buildStoreFilters(query) {
   const where = [];
   const params = [];
-  if (regionId) { where.push('region_id = ?'); params.push(Number(regionId)); }
-  if (q) {
-    where.push('(name LIKE ? OR CAST(code AS TEXT) LIKE ?)');
-    params.push(`%${q}%`, `%${q}%`);
+  const like = (col, val) => { where.push(`${col} LIKE ?`); params.push(`%${val}%`); };
+  const eq = (col, val) => { where.push(`${col} = ?`); params.push(val); };
+
+  if (query.q) { where.push('(name LIKE ? OR CAST(code AS TEXT) LIKE ?)'); params.push(`%${query.q}%`, `%${query.q}%`); }
+  if (query.code) like('CAST(code AS TEXT)', query.code);
+  if (query.name) like('name', query.name);
+  if (query.address) like('address', query.address);
+  if (query.managerName) like('manager_name', query.managerName);
+  if (query.phone) { where.push('(phone LIKE ? OR whatsapp LIKE ?)'); params.push(`%${query.phone}%`, `%${query.phone}%`); }
+  if (query.regionId) eq('region_id', Number(query.regionId));
+  if (query.governate) eq('governate', query.governate);
+  if (query.category) eq('category', query.category);
+  if (query.shopClass) eq('shop_class', query.shopClass);
+  if (query.status === 'active') where.push("(status IS NULL OR status = '')");
+  else if (query.status) eq('status', query.status);
+  if (query.mapShow === '1' || query.mapShow === '0') eq('map_show', Number(query.mapShow));
+  if (query.hasCoords === '1') where.push('lat IS NOT NULL AND lng IS NOT NULL');
+  if (query.hasCoords === '0') where.push('(lat IS NULL OR lng IS NULL)');
+  if (query.repName) { where.push('EXISTS (SELECT 1 FROM visits v WHERE v.store_id = stores.id AND v.rep_name = ?)'); params.push(query.repName); }
+  if (query.visitDay) { where.push('EXISTS (SELECT 1 FROM visits v WHERE v.store_id = stores.id AND v.visit_day = ?)'); params.push(query.visitDay); }
+
+  return { whereSql: where.length ? ' WHERE ' + where.join(' AND ') : '', params };
+}
+
+/** ملخص زيارات مجموعة محلات: Map<storeId, [{repName, invoiceType, visitDay}]> */
+function visitsForStores(ids) {
+  const map = new Map();
+  if (!ids.length) return map;
+  const marks = ids.map(() => '?').join(',');
+  const rows = db
+    .prepare(`SELECT store_id AS storeId, rep_name AS repName, invoice_type AS invoiceType, visit_day AS visitDay
+              FROM visits WHERE store_id IN (${marks}) ORDER BY id`)
+    .all(...ids);
+  for (const v of rows) {
+    if (!map.has(v.storeId)) map.set(v.storeId, []);
+    map.get(v.storeId).push({ repName: v.repName, invoiceType: v.invoiceType, visitDay: v.visitDay });
   }
-  if (where.length) sql += ' WHERE ' + where.join(' AND ');
-  sql += ' ORDER BY name LIMIT 500';
-  res.json(db.prepare(sql).all(...params));
+  return map;
+}
+
+adminRouter.get('/stores', (req, res) => {
+  const { whereSql, params } = buildStoreFilters(req.query);
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const pageSize = Math.min(500, Math.max(10, Number(req.query.pageSize) || 50));
+
+  const total = db.prepare(`SELECT COUNT(*) AS c FROM stores${whereSql}`).get(...params).c;
+  const rows = db
+    .prepare(`SELECT ${STORE_COLS} FROM stores${whereSql} ORDER BY name LIMIT ? OFFSET ?`)
+    .all(...params, pageSize, (page - 1) * pageSize);
+
+  const visitsMap = visitsForStores(rows.map((r) => r.id));
+  const withVisits = rows.map((r) => ({
+    ...r,
+    visits: visitsMap.get(r.id) ?? [],
+  }));
+  res.json({ rows: withVisits, total, page, pageSize });
+});
+
+// قيم الفلاتر المميزة للقوائم المنسدلة
+adminRouter.get('/stores/filter-options', (req, res) => {
+  const distinct = (col) =>
+    db.prepare(`SELECT DISTINCT ${col} AS v FROM stores WHERE ${col} IS NOT NULL AND ${col} != '' ORDER BY v`)
+      .all().map((r) => r.v);
+  res.json({
+    governates: distinct('governate'),
+    categories: distinct('category'),
+    shopClasses: distinct('shop_class'),
+    statuses: distinct('status'),
+    reps: db.prepare("SELECT DISTINCT rep_name AS v FROM visits WHERE rep_name IS NOT NULL AND rep_name != '' ORDER BY v").all().map((r) => r.v),
+    visitDays: db.prepare("SELECT DISTINCT visit_day AS v FROM visits WHERE visit_day IS NOT NULL AND visit_day != '' ORDER BY v").all().map((r) => r.v),
+  });
+});
+
+// تصدير النتائج المفلترة إلى CSV (يفتح في إكسل بترميز عربي سليم)
+adminRouter.get('/stores/export', (req, res) => {
+  const { whereSql, params } = buildStoreFilters(req.query);
+  const rows = db.prepare(`SELECT ${STORE_COLS} FROM stores${whereSql} ORDER BY name`).all(...params);
+  const visitsMap = visitsForStores(rows.map((r) => r.id));
+
+  const esc = (v) => {
+    if (v == null) return '';
+    const s = String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const header = ['الكود', 'اسم الزبون', 'نوع الحساب', 'الحالة', 'يظهر بالتطبيق', 'طبيعة العمل', 'الفئة',
+    'اسم المسؤول', 'المحافظة', 'المنطقة', 'العنوان', 'الموبايل', 'الواتس', 'Latitude', 'Longitude', 'الزيارات'];
+  const regionNames = new Map(db.prepare('SELECT id, name FROM regions').all().map((r) => [r.id, r.name]));
+  const lines = [header.map(esc).join(',')];
+  for (const s of rows) {
+    const visits = (visitsMap.get(s.id) ?? [])
+      .map((v) => [v.repName, v.invoiceType, v.visitDay].filter(Boolean).join(' - '))
+      .join(' | ');
+    lines.push([
+      s.code, s.name, s.accountType, s.status || 'فعّال', s.mapShow ? 'نعم' : 'لا', s.category, s.shopClass,
+      s.managerName, s.governate, regionNames.get(s.regionId) ?? '', s.address, s.phone, s.whatsapp,
+      s.lat, s.lng, visits,
+    ].map(esc).join(','));
+  }
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="customers.csv"');
+  res.send('﻿' + lines.join('\r\n'));
 });
 
 adminRouter.get('/stores/:id', (req, res) => {
@@ -186,7 +278,56 @@ adminRouter.delete('/stores/:id', (req, res) => {
   res.json({ ok: true });
 });
 
-// ---------- زيارات المندوبين ----------
+// ---------- التقارير (Pivot) ----------
+
+const PIVOT_DIMS = {
+  region: { label: 'المنطقة', expr: "COALESCE((SELECT name FROM regions r WHERE r.id = s.region_id), '(بدون منطقة)')" },
+  governate: { label: 'المحافظة', expr: "COALESCE(NULLIF(s.governate, ''), '(فارغ)')" },
+  status: { label: 'الحالة', expr: "COALESCE(NULLIF(s.status, ''), 'فعّال')" },
+  mapShow: { label: 'يظهر بالتطبيق', expr: "CASE s.map_show WHEN 1 THEN 'نعم' ELSE 'لا' END" },
+  category: { label: 'طبيعة العمل', expr: "COALESCE(NULLIF(s.category, ''), '(فارغ)')" },
+  shopClass: { label: 'الفئة', expr: "COALESCE(NULLIF(s.shop_class, ''), '(فارغ)')" },
+  managerName: { label: 'اسم المسؤول', expr: "COALESCE(NULLIF(s.manager_name, ''), '(فارغ)')" },
+  accountType: { label: 'نوع الحساب', expr: "COALESCE(NULLIF(s.account_type, ''), '(فارغ)')" },
+  hasCoords: { label: 'الإحداثيات', expr: "CASE WHEN s.lat IS NULL OR s.lng IS NULL THEN 'بلا إحداثيات' ELSE 'بإحداثيات' END" },
+  hasVisits: { label: 'الزيارات', expr: "CASE WHEN EXISTS (SELECT 1 FROM visits v WHERE v.store_id = s.id) THEN 'له زيارات' ELSE 'بلا زيارات' END" },
+  repName: { label: 'المندوب', expr: "COALESCE(NULLIF(v.rep_name, ''), '(بدون مندوب)')" },
+  visitDay: { label: 'يوم الزيارة', expr: "COALESCE(NULLIF(v.visit_day, ''), '(بدون يوم)')" },
+};
+
+adminRouter.get('/reports/pivot', (req, res) => {
+  const rowsDim = PIVOT_DIMS[req.query.rows];
+  const colsDim = PIVOT_DIMS[req.query.cols];
+  const metric = req.query.metric === 'visits' ? 'visits' : 'stores';
+  if (!rowsDim) return res.status(400).json({ error: 'بُعد الصفوف غير صالح' });
+
+  const usesVisits = req.query.rows === 'repName' || req.query.rows === 'visitDay'
+    || req.query.cols === 'repName' || req.query.cols === 'visitDay' || metric === 'visits';
+  const fromSql = 'FROM stores s' + (usesVisits ? ' LEFT JOIN visits v ON v.store_id = s.id' : '');
+  const metricSql = metric === 'visits' ? 'COUNT(v.id)' : 'COUNT(DISTINCT s.id)';
+
+  const colExpr = colsDim ? colsDim.expr : `'(الكل)'`;
+  const rows = db
+    .prepare(`SELECT ${rowsDim.expr} AS rk, ${colExpr} AS ck, ${metricSql} AS c ${fromSql} GROUP BY rk, ck`)
+    .all();
+
+  const rowLabels = [...new Set(rows.map((r) => r.rk))].sort();
+  const colLabels = [...new Set(rows.map((r) => r.ck))].sort();
+  const cells = {};
+  for (const r of rows) cells[`${r.rk}||${r.ck}`] = r.c;
+
+  res.json({
+    rowsLabel: rowsDim.label,
+    colsLabel: colsDim ? colsDim.label : null,
+    rowLabels,
+    colLabels,
+    cells,
+  });
+});
+
+adminRouter.get('/reports/dimensions', (req, res) => {
+  res.json(Object.entries(PIVOT_DIMS).map(([key, d]) => ({ key, label: d.label })));
+});
 
 adminRouter.post('/stores/:id/visits', (req, res) => {
   const storeId = Number(req.params.id);

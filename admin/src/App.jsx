@@ -8,6 +8,7 @@ import Regions from './pages/Regions.jsx';
 import RegionEdit from './pages/RegionEdit.jsx';
 import Stores from './pages/Stores.jsx';
 import StoreEdit from './pages/StoreEdit.jsx';
+import Reports from './pages/Reports.jsx';
 import Submissions from './pages/Submissions.jsx';
 import Import from './pages/Import.jsx';
 
@@ -38,6 +39,7 @@ export default function App() {
         <Route path="stores" element={<Stores />} />
         <Route path="stores/new" element={<StoreEdit />} />
         <Route path="stores/:id/edit" element={<StoreEdit />} />
+        <Route path="reports" element={<Reports />} />
         <Route path="submissions" element={<Submissions />} />
         <Route path="import" element={<Import />} />
       </Route>

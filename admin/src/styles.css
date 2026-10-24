@@ -218,6 +218,50 @@ input:focus, select:focus, textarea:focus {
 
 .muted { color: #777; font-size: 13px; }
 
+.col-picker-wrap { position: relative; }
+
+.col-picker {
+  position: absolute;
+  top: calc(100% + 4px);
+  inset-inline-start: 0;
+  z-index: 30;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  padding: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(140px, 1fr));
+  gap: 6px 16px;
+  min-width: 320px;
+}
+
+.col-picker label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.col-picker input { width: auto; }
+
+.filter-cell input,
+.filter-cell select { padding: 4px 8px; font-size: 13px; }
+
+.cell-visits {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cell-link { cursor: pointer; color: #2563eb; }
+.cell-link:hover { background: #eff6ff; }
+
+.pivot-total { font-weight: 600; background: #f9fafb; }
+
 .badge {
   display: inline-block;
   padding: 2px 10px;

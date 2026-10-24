@@ -23,6 +23,8 @@ export default function StoreEdit() {
   const [visits, setVisits] = useState([]);
   const [newVisit, setNewVisit] = useState(EMPTY_VISIT);
   const [pos, setPos] = useState(null);
+  const [latText, setLatText] = useState('');
+  const [lngText, setLngText] = useState('');
   const [regions, setRegions] = useState([]);
   const [loading, setLoading] = useState(!isNew);
   const [error, setError] = useState('');
@@ -117,8 +119,9 @@ export default function StoreEdit() {
       group?.clearLayers();
       return;
     }
-    api.listStores({ regionId: form.regionId })
-      .then((stores) => {
+    api.listStores({ regionId: form.regionId, pageSize: 500 })
+      .then((result) => {
+        const stores = result.rows || [];
         group.clearLayers();
         for (const s of stores) {
           if (String(s.id) === String(id)) continue;
@@ -136,6 +139,46 @@ export default function StoreEdit() {
   }, [form.regionId, id]);
 
   const set = (key) => (e) => setForm({ ...form, [key]: e.target.value });
+
+  // مزامنة حقول الإحداثيات النصية مع الموقع الحالي (نقر/سحب على الخريطة)
+  useEffect(() => {
+    if (pos) {
+      if (Number(latText) === pos[0] && Number(lngText) === pos[1]) return;
+      setLatText(pos[0].toFixed(6));
+      setLngText(pos[1].toFixed(6));
+    } else {
+      if (latText === '' && lngText === '') return;
+      setLatText('');
+      setLngText('');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pos]);
+
+  const applyCoordInputs = (lat, lng) => {
+    if (lat.trim() === '' && lng.trim() === '') {
+      setPos(null);
+      return;
+    }
+    const la = Number(lat);
+    const ln = Number(lng);
+    if (
+      lat.trim() !== '' && lng.trim() !== '' &&
+      Number.isFinite(la) && Number.isFinite(ln) &&
+      la >= -90 && la <= 90 && ln >= -180 && ln <= 180
+    ) {
+      setPos([la, ln]);
+    }
+  };
+
+  const onLatChange = (e) => {
+    setLatText(e.target.value);
+    applyCoordInputs(e.target.value, lngText);
+  };
+
+  const onLngChange = (e) => {
+    setLngText(e.target.value);
+    applyCoordInputs(latText, e.target.value);
+  };
 
   const onSave = async (e) => {
     e.preventDefault();
@@ -299,9 +342,19 @@ export default function StoreEdit() {
           </div>
 
           <p className="muted">
-            انقر على الخريطة لتحديد موقع الزبون. النقاط الزرقاء هي زبائن المنطقة المحددة.
-            {pos ? <> الموقع الحالي: {pos[0].toFixed(5)}, {pos[1].toFixed(5)}</> : <> لا يوجد موقع محدد — لن يظهر دبوس على الخريطة.</>}
+            انقر على الخريطة لتحديد موقع الزبون أو أدخل الإحداثيات يدوياً. النقاط الزرقاء هي زبائن المنطقة المحددة.
+            {pos ? '' : <> لا يوجد موقع محدد — لن يظهر دبوس على الخريطة.</>}
           </p>
+          <div className="filters-row">
+            <div className="form-field" style={{ minWidth: 160 }}>
+              <label>Latitude</label>
+              <input type="text" value={latText} onChange={onLatChange} placeholder="36.200000" />
+            </div>
+            <div className="form-field" style={{ minWidth: 160 }}>
+              <label>Longitude</label>
+              <input type="text" value={lngText} onChange={onLngChange} placeholder="37.130000" />
+            </div>
+          </div>
           <div ref={mapRef} className="map-container" style={{ marginBottom: 16 }} />
 
           <div className="btn-row">
