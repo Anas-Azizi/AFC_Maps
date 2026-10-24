@@ -101,7 +101,7 @@ class StoreDetailSheet : BottomSheetDialogFragment() {
         } else {
             binding.rowCode.visibility = View.GONE
         }
-        bindRow(binding.rowAccountType, binding.accountTypeValue, store2?.accountType)
+        bindRow(binding.rowAccountType, binding.accountTypeValue, null)
         bindRow(binding.rowStatus, binding.statusValue, store2?.status)
         bindRow(binding.rowCategory, binding.categoryValue, store2?.category)
         bindRow(binding.rowShopClass, binding.shopClassValue, store2?.shopClass)
@@ -130,6 +130,31 @@ class StoreDetailSheet : BottomSheetDialogFragment() {
 
         val onAction = pendingAction
         val store = pendingStore
+        // مشاركة موقع الزبون عبر واتساب برابط Google Maps — متاح كلما وُجدت إحداثيات
+        val storeName = args.getString(ARG_NAME).orEmpty()
+        if (store?.lat == null || store.lng == null) {
+            binding.shareLocationButton.visibility = View.GONE
+        } else {
+            binding.shareLocationButton.setOnClickListener {
+                val text = "$storeName\nhttps://maps.google.com/?q=${store.lat},${store.lng}"
+                val send = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, text)
+                    setPackage("com.whatsapp")
+                }
+                try {
+                    startActivity(send)
+                } catch (e: ActivityNotFoundException) {
+                    // واتساب غير مثبت — نفتح نافذة المشاركة العامة
+                    send.setPackage(null)
+                    try {
+                        startActivity(Intent.createChooser(send, null))
+                    } catch (e2: ActivityNotFoundException) {
+                        // لا يوجد تطبيق مشاركة على الجهاز
+                    }
+                }
+            }
+        }
         if (onAction == null || store == null) {
             binding.drawRouteButton.visibility = View.GONE
             binding.updateLocationButton.visibility = View.GONE
