@@ -68,9 +68,10 @@ export default function StoreEdit() {
       .finally(() => setLoading(false));
   }, [id, isNew]);
 
-  // تهيئة الخريطة
+  // تهيئة الخريطة — بعد انتهاء التحميل حتى تكون الحاوية مرسومة
   useEffect(() => {
-    const map = L.map(mapRef.current).setView(ALEPPO, 12);
+    if (loading) return;
+    const map = L.map(mapRef.current).setView(pos ?? ALEPPO, pos ? 15 : 12);
     mapInstanceRef.current = map;
 
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -89,7 +90,7 @@ export default function StoreEdit() {
       markerRef.current = null;
       contextLayersRef.current = null;
     };
-  }, []);
+  }, [loading]);
 
   // علامة موقع الزبون
   useEffect(() => {
