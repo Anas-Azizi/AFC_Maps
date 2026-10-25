@@ -4,7 +4,7 @@ import { api } from '../api.js';
 
 const FILTER_KEYS = [
   'q', 'code', 'name', 'address', 'managerName', 'phone',
-  'regionId', 'governate', 'category', 'shopClass', 'status', 'mapShow',
+  'regionId', 'governate', 'category', 'shopClass', 'accountType', 'status', 'mapShow',
   'repName', 'visitDay',
 ];
 
@@ -34,7 +34,18 @@ const ALL_COLUMNS = [
 
 const DEFAULT_VISIBLE = ['code', 'name', 'region', 'visits', 'status', 'mapShow', 'actions'];
 
-const PAGE_SIZES = [20, 50, 100, 200];
+const PAGE_SIZES = [50, 100, 200, 500];
+
+const BULK_FIELDS = [
+  { key: 'mapShow', label: 'يظهر بالتطبيق' },
+  { key: 'status', label: 'الحالة' },
+  { key: 'regionId', label: 'المنطقة' },
+  { key: 'governate', label: 'المحافظة' },
+  { key: 'category', label: 'طبيعة العمل' },
+  { key: 'shopClass', label: 'الفئة' },
+  { key: 'managerName', label: 'اسم المسؤول' },
+  { key: 'accountType', label: 'نوع الحساب' },
+];
 
 function loadVisibleCols() {
   try {
@@ -68,16 +79,24 @@ export default function Stores() {
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [regions, setRegions] = useState([]);
-  const [options, setOptions] = useState({ governates: [], categories: [], shopClasses: [], statuses: [], reps: [], visitDays: [] });
+  const [options, setOptions] = useState({ governates: [], categories: [], shopClasses: [], accountTypes: [], statuses: [], reps: [], visitDays: [] });
   const [visibleCols, setVisibleCols] = useState(loadVisibleCols);
   const [showColPicker, setShowColPicker] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
 
+  const [selected, setSelected] = useState(() => new Set());
+  const [allFiltered, setAllFiltered] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkField, setBulkField] = useState('mapShow');
+  const [bulkValue, setBulkValue] = useState('');
+  const [bulkBusy, setBulkBusy] = useState(false);
+
   useEffect(() => {
     api.listRegions().then(setRegions).catch((e) => setError(e.message));
-    api.filterOptions().then(setOptions).catch(() => {});
+    api.filterOptions().then((o) => setOptions({ governates: [], categories: [], shopClasses: [], accountTypes: [], statuses: [], reps: [], visitDays: [], ...o })).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -132,11 +151,86 @@ export default function Stores() {
     setPage(1);
   };
 
+  const activeFilters = () => {
+    const out = {};
+    for (const [k, v] of Object.entries(filters)) {
+      if (v !== '' && v !== undefined && v !== null) out[k] = v;
+    }
+    return out;
+  };
+
+  const clearSelection = () => {
+    setSelected(new Set());
+    setAllFiltered(false);
+  };
+
+  const toggleRow = (id) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const pageIds = rows.map((s) => s.id);
+  const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
+
+  const togglePage = () => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allPageSelected) pageIds.forEach((id) => next.delete(id));
+      else pageIds.forEach((id) => next.add(id));
+      return next;
+    });
+  };
+
+  const selectionCount = allFiltered ? total : selected.size;
+
+  const buildBulkSet = () => {
+    if (bulkField === 'mapShow') return { mapShow: bulkValue === '1' };
+    if (bulkField === 'regionId') return { regionId: bulkValue === '' ? '' : Number(bulkValue) };
+    return { [bulkField]: bulkValue };
+  };
+
+  const applyBulk = async () => {
+    setError('');
+    setSuccess('');
+    if (bulkField === 'mapShow' && bulkValue === '') {
+      setError('اختر قيمة للحقل');
+      return;
+    }
+    if (!window.confirm(`سيتم تعديل ${selectionCount} زبوناً. هل أنت متأكد؟`)) return;
+    setBulkBusy(true);
+    try {
+      const payload = {
+        ...(allFiltered ? { allFiltered: true, filters: activeFilters() } : { ids: [...selected] }),
+        set: buildBulkSet(),
+      };
+      const res = await api.bulkUpdateStores(payload);
+      setSuccess(`تم تعديل ${res.updated} زبوناً بنجاح`);
+      clearSelection();
+      setBulkOpen(false);
+      setBulkValue('');
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
   const remove = async (s) => {
     if (!window.confirm(`هل أنت متأكد من حذف الزبون «${s.name}»؟`)) return;
     setError('');
+    setSuccess('');
     try {
       await api.deleteStore(s.id);
+      setSelected((prev) => {
+        const next = new Set(prev);
+        next.delete(s.id);
+        return next;
+      });
       load();
     } catch (err) {
       setError(err.message);
@@ -145,6 +239,7 @@ export default function Stores() {
 
   const toggleMapShow = async (s) => {
     setError('');
+    setSuccess('');
     const next = !s.mapShow;
     const prev = rows;
     setRows(rows.map((x) => (x.id === s.id ? { ...x, mapShow: next ? 1 : 0 } : x)));
@@ -158,6 +253,7 @@ export default function Stores() {
 
   const exportCsv = async () => {
     setError('');
+    setSuccess('');
     setExporting(true);
     try {
       await api.exportStores(filters);
@@ -236,6 +332,15 @@ export default function Stores() {
             <option value="">الكل</option>
             {options.shopClasses.map((c) => (
               <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+        );
+      case 'accountType':
+        return (
+          <select value={filters.accountType} onChange={(e) => setFilter('accountType', e.target.value)}>
+            <option value="">الكل</option>
+            {options.accountTypes.map((t) => (
+              <option key={t} value={t}>{t}</option>
             ))}
           </select>
         );
@@ -329,12 +434,81 @@ export default function Stores() {
     }
   };
 
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const renderBulkValueControl = () => {
+    switch (bulkField) {
+      case 'mapShow':
+        return (
+          <select value={bulkValue} onChange={(e) => setBulkValue(e.target.value)}>
+            <option value="">اختر…</option>
+            <option value="1">نعم</option>
+            <option value="0">لا</option>
+          </select>
+        );
+      case 'status':
+        return (
+          <select value={bulkValue} onChange={(e) => setBulkValue(e.target.value)}>
+            <option value="">فعّال</option>
+            <option value="cancelled">cancelled</option>
+          </select>
+        );
+      case 'regionId':
+        return (
+          <select value={bulkValue} onChange={(e) => setBulkValue(e.target.value)}>
+            <option value="">بدون منطقة</option>
+            {regions.map((r) => (
+              <option key={r.id} value={r.id}>{r.name}</option>
+            ))}
+          </select>
+        );
+      case 'managerName':
+        return (
+          <input
+            type="text"
+            value={bulkValue}
+            onChange={(e) => setBulkValue(e.target.value)}
+            placeholder="اتركه فارغاً للمسح"
+          />
+        );
+      case 'governate':
+      case 'category':
+      case 'shopClass':
+      case 'accountType': {
+        const listId = `bulk-${bulkField}`;
+        const values =
+          bulkField === 'governate' ? options.governates :
+          bulkField === 'category' ? options.categories :
+          bulkField === 'shopClass' ? options.shopClasses :
+          options.accountTypes;
+        return (
+          <>
+            <input
+              type="text"
+              list={listId}
+              value={bulkValue}
+              onChange={(e) => setBulkValue(e.target.value)}
+              placeholder="اتركه فارغاً للمسح"
+            />
+            <datalist id={listId}>
+              {values.map((v) => (
+                <option key={v} value={v} />
+              ))}
+            </datalist>
+          </>
+        );
+      }
+      default:
+        return null;
+    }
+  };
+
+  const isAll = pageSize === 'all';
+  const totalPages = isAll ? 1 : Math.max(1, Math.ceil(total / pageSize));
 
   return (
     <div>
       <h1>الزبائن</h1>
       {error && <div className="alert alert-error">{error}</div>}
+      {success && <div className="alert alert-success">{success}</div>}
 
       <div className="card">
         <div className="filters-row">
@@ -386,7 +560,7 @@ export default function Stores() {
             <select
               value={pageSize}
               onChange={(e) => {
-                setPageSize(Number(e.target.value));
+                setPageSize(e.target.value === 'all' ? 'all' : Number(e.target.value));
                 setPage(1);
               }}
               style={{ width: 'auto' }}
@@ -394,10 +568,43 @@ export default function Stores() {
               {PAGE_SIZES.map((n) => (
                 <option key={n} value={n}>{n}</option>
               ))}
+              <option value="all">الكل</option>
             </select>
           </div>
           <span className="muted">إجمالي النتائج: {total}</span>
         </div>
+
+        {selectionCount > 0 && (
+          <div className="filters-row alert alert-warning" style={{ alignItems: 'center', marginBottom: 12 }}>
+            {allFiltered ? (
+              <span>محدد كل النتائج المفلترة ({total})</span>
+            ) : (
+              <>
+                <span>محدد {selected.size} زبوناً</span>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-small"
+                  onClick={() => {
+                    setAllFiltered(true);
+                    setSelected(new Set());
+                  }}
+                >
+                  تحديد كل النتائج ({total})
+                </button>
+              </>
+            )}
+            <button
+              type="button"
+              className="btn btn-primary btn-small"
+              onClick={() => setBulkOpen(true)}
+            >
+              تعديل جماعي
+            </button>
+            <button type="button" className="btn btn-secondary btn-small" onClick={clearSelection}>
+              إلغاء التحديد
+            </button>
+          </div>
+        )}
 
         {loading ? (
           <p>جارٍ التحميل…</p>
@@ -407,11 +614,20 @@ export default function Stores() {
             <table>
               <thead>
                 <tr>
+                  <th>
+                    <input
+                      type="checkbox"
+                      checked={allPageSelected}
+                      onChange={togglePage}
+                      title="تحديد/إلغاء تحديد صفوف هذه الصفحة"
+                    />
+                  </th>
                   {columns.map((c) => (
                     <th key={c.key}>{c.label}</th>
                   ))}
                 </tr>
                 <tr>
+                  <th className="filter-cell"></th>
                   {columns.map((c) => (
                     <th key={c.key} className="filter-cell">{renderFilterCell(c)}</th>
                   ))}
@@ -420,40 +636,94 @@ export default function Stores() {
               <tbody>
                 {rows.map((s) => (
                   <tr key={s.id}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={allFiltered || selected.has(s.id)}
+                        disabled={allFiltered}
+                        onChange={() => toggleRow(s.id)}
+                      />
+                    </td>
                     {columns.map((c) => (
                       <td key={c.key}>{renderCell(s, c)}</td>
                     ))}
                   </tr>
                 ))}
                 {rows.length === 0 && (
-                  <tr><td colSpan={columns.length} className="muted">لا توجد نتائج</td></tr>
+                  <tr><td colSpan={columns.length + 1} className="muted">لا توجد نتائج</td></tr>
                 )}
               </tbody>
             </table>
             </div>
 
-            <div className="filters-row" style={{ alignItems: 'center', marginTop: 12, marginBottom: 0 }}>
-              <button
-                type="button"
-                className="btn btn-secondary btn-small"
-                disabled={page <= 1}
-                onClick={() => setPage(page - 1)}
-              >
-                السابق
-              </button>
-              <span className="muted">صفحة {page} من {totalPages}</span>
-              <button
-                type="button"
-                className="btn btn-secondary btn-small"
-                disabled={page >= totalPages}
-                onClick={() => setPage(page + 1)}
-              >
-                التالي
-              </button>
-            </div>
+            {!isAll && (
+              <div className="filters-row" style={{ alignItems: 'center', marginTop: 12, marginBottom: 0 }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-small"
+                  disabled={page <= 1}
+                  onClick={() => setPage(page - 1)}
+                >
+                  السابق
+                </button>
+                <span className="muted">صفحة {page} من {totalPages}</span>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-small"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage(page + 1)}
+                >
+                  التالي
+                </button>
+              </div>
+            )}
           </>
         )}
       </div>
+
+      {bulkOpen && (
+        <div className="modal-overlay" onClick={() => !bulkBusy && setBulkOpen(false)}>
+          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+            <h2>تعديل جماعي — {selectionCount} زبوناً</h2>
+            <div className="form-field" style={{ marginBottom: 12 }}>
+              <label>الحقل</label>
+              <select
+                value={bulkField}
+                onChange={(e) => {
+                  setBulkField(e.target.value);
+                  setBulkValue('');
+                }}
+              >
+                {BULK_FIELDS.map((f) => (
+                  <option key={f.key} value={f.key}>{f.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-field" style={{ marginBottom: 16 }}>
+              <label>القيمة الجديدة</label>
+              {renderBulkValueControl()}
+            </div>
+            <div className="btn-row">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={applyBulk}
+                disabled={bulkBusy}
+              >
+                {bulkBusy ? 'جارٍ التنفيذ…' : 'تنفيذ'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setBulkOpen(false)}
+                disabled={bulkBusy}
+              >
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

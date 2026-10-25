@@ -15,6 +15,27 @@ const PRESETS = [
   { label: 'بلا زيارات حسب المنطقة', rows: 'region', cols: 'hasVisits', metric: 'stores' },
 ];
 
+const REPORT_FILTER_KEYS = [
+  'regionId', 'governate', 'status', 'mapShow', 'category', 'shopClass',
+  'accountType', 'repName', 'visitDay', 'hasCoords', 'hasVisits',
+];
+
+const FILTER_LABELS = {
+  regionId: 'المنطقة',
+  governate: 'المحافظة',
+  status: 'الحالة',
+  mapShow: 'يظهر بالتطبيق',
+  category: 'طبيعة العمل',
+  shopClass: 'الفئة',
+  accountType: 'نوع الحساب',
+  repName: 'المندوب',
+  visitDay: 'يوم الزيارة',
+  hasCoords: 'الإحداثيات',
+  hasVisits: 'الزيارات',
+};
+
+const EMPTY_REPORT_FILTERS = Object.fromEntries(REPORT_FILTER_KEYS.map((k) => [k, '']));
+
 function dimToFilter(dimKey, label, regions) {
   if (!label || label === '(فارغ)') return null;
   switch (dimKey) {
@@ -49,9 +70,11 @@ export default function Reports() {
   const navigate = useNavigate();
   const [dimensions, setDimensions] = useState([]);
   const [regions, setRegions] = useState([]);
+  const [options, setOptions] = useState({ governates: [], categories: [], shopClasses: [], accountTypes: [], statuses: [], reps: [], visitDays: [] });
   const [rowsDim, setRowsDim] = useState('region');
   const [colsDim, setColsDim] = useState('');
   const [metric, setMetric] = useState('stores');
+  const [filters, setFilters] = useState(EMPTY_REPORT_FILTERS);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -59,26 +82,38 @@ export default function Reports() {
   useEffect(() => {
     api.reportDimensions().then(setDimensions).catch((e) => setError(e.message));
     api.listRegions().then(setRegions).catch(() => {});
+    api.filterOptions().then((o) => setOptions({ governates: [], categories: [], shopClasses: [], accountTypes: [], statuses: [], reps: [], visitDays: [], ...o })).catch(() => {});
   }, []);
+
+  const activeFilters = () => {
+    const out = {};
+    for (const [k, v] of Object.entries(filters)) {
+      if (v !== '' && v !== undefined && v !== null) out[k] = v;
+    }
+    return out;
+  };
 
   useEffect(() => {
     if (!rowsDim) return;
     setLoading(true);
     setError('');
-    api.pivotReport({ rows: rowsDim, cols: colsDim || undefined, metric })
+    api.pivotReport({ rows: rowsDim, cols: colsDim || undefined, metric, ...activeFilters() })
       .then(setData)
       .catch((e) => {
         setData(null);
         setError(e.message);
       })
       .finally(() => setLoading(false));
-  }, [rowsDim, colsDim, metric]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rowsDim, colsDim, metric, filters]);
 
   const applyPreset = (p) => {
     setRowsDim(p.rows);
     setColsDim(p.cols);
     setMetric(p.metric);
   };
+
+  const setFilter = (key, value) => setFilters((prev) => ({ ...prev, [key]: value }));
 
   const cellValue = (rowLabel, colLabel) =>
     data?.cells?.[`${rowLabel}||${colLabel}`] ?? 0;
@@ -87,13 +122,24 @@ export default function Reports() {
     const rowFilter = dimToFilter(rowsDim, rowLabel, regions);
     const colFilter = colsDim ? dimToFilter(colsDim, colLabel, regions) : null;
     if (rowFilter === null || (colsDim && colFilter === null)) return;
-    const params = new URLSearchParams({ ...rowFilter, ...(colFilter || {}) });
+    const params = new URLSearchParams({ ...activeFilters(), ...rowFilter, ...(colFilter || {}) });
     navigate(`/stores?${params.toString()}`);
   };
 
   const isCellClickable = (rowLabel, colLabel) =>
     dimToFilter(rowsDim, rowLabel, regions) !== null &&
     (!colsDim || dimToFilter(colsDim, colLabel, regions) !== null);
+
+  const filterValueLabel = (key, value) => {
+    if (key === 'regionId') return regions.find((r) => String(r.id) === String(value))?.name || value;
+    if (key === 'status') return value === 'active' ? 'فعّال' : value;
+    if (key === 'mapShow') return value === '1' ? 'نعم' : 'لا';
+    if (key === 'hasCoords') return value === '1' ? 'بإحداثيات' : 'بلا إحداثيات';
+    if (key === 'hasVisits') return value === '1' ? 'له زيارات' : 'بلا زيارات';
+    return value;
+  };
+
+  const activeFilterEntries = Object.entries(filters).filter(([, v]) => v !== '');
 
   const dimLabel = (key) => dimensions.find((d) => d.key === key)?.label || key;
 
@@ -150,6 +196,124 @@ export default function Reports() {
           </div>
         </div>
 
+        <h2>فلاتر التقرير</h2>
+        <div className="filters-row">
+          <div className="form-field">
+            <label>المنطقة</label>
+            <select value={filters.regionId} onChange={(e) => setFilter('regionId', e.target.value)}>
+              <option value="">الكل</option>
+              {regions.map((r) => (
+                <option key={r.id} value={r.id}>{r.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="form-field">
+            <label>المحافظة</label>
+            <select value={filters.governate} onChange={(e) => setFilter('governate', e.target.value)}>
+              <option value="">الكل</option>
+              {options.governates.map((g) => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+            </select>
+          </div>
+          <div className="form-field">
+            <label>الحالة</label>
+            <select value={filters.status} onChange={(e) => setFilter('status', e.target.value)}>
+              <option value="">الكل</option>
+              <option value="active">فعّال</option>
+              {options.statuses.filter((s) => s).map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+          <div className="form-field">
+            <label>يظهر بالتطبيق</label>
+            <select value={filters.mapShow} onChange={(e) => setFilter('mapShow', e.target.value)}>
+              <option value="">الكل</option>
+              <option value="1">نعم</option>
+              <option value="0">لا</option>
+            </select>
+          </div>
+          <div className="form-field">
+            <label>طبيعة العمل</label>
+            <select value={filters.category} onChange={(e) => setFilter('category', e.target.value)}>
+              <option value="">الكل</option>
+              {options.categories.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+          <div className="form-field">
+            <label>الفئة</label>
+            <select value={filters.shopClass} onChange={(e) => setFilter('shopClass', e.target.value)}>
+              <option value="">الكل</option>
+              {options.shopClasses.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+          <div className="form-field">
+            <label>نوع الحساب</label>
+            <select value={filters.accountType} onChange={(e) => setFilter('accountType', e.target.value)}>
+              <option value="">الكل</option>
+              {options.accountTypes.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+          <div className="form-field">
+            <label>المندوب</label>
+            <select value={filters.repName} onChange={(e) => setFilter('repName', e.target.value)}>
+              <option value="">الكل</option>
+              {options.reps.map((r) => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
+          </div>
+          <div className="form-field">
+            <label>يوم الزيارة</label>
+            <select value={filters.visitDay} onChange={(e) => setFilter('visitDay', e.target.value)}>
+              <option value="">الكل</option>
+              {options.visitDays.map((d) => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+          </div>
+          <div className="form-field">
+            <label>الإحداثيات</label>
+            <select value={filters.hasCoords} onChange={(e) => setFilter('hasCoords', e.target.value)}>
+              <option value="">الكل</option>
+              <option value="1">بإحداثيات</option>
+              <option value="0">بلا إحداثيات</option>
+            </select>
+          </div>
+          <div className="form-field">
+            <label>الزيارات</label>
+            <select value={filters.hasVisits} onChange={(e) => setFilter('hasVisits', e.target.value)}>
+              <option value="">الكل</option>
+              <option value="1">له زيارات</option>
+              <option value="0">بلا زيارات</option>
+            </select>
+          </div>
+        </div>
+
+        {activeFilterEntries.length > 0 && (
+          <div className="filters-row" style={{ alignItems: 'center' }}>
+            <span className="muted">
+              فلاتر: {activeFilterEntries.map(([k, v]) => `${FILTER_LABELS[k]}=${filterValueLabel(k, v)}`).join('، ')}
+            </span>
+            <button
+              type="button"
+              className="btn btn-secondary btn-small"
+              onClick={() => setFilters(EMPTY_REPORT_FILTERS)}
+            >
+              مسح الفلاتر
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="card">
         {loading ? (
           <p>جارٍ التحميل…</p>
         ) : !data ? null : (

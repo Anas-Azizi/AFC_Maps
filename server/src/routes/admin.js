@@ -119,30 +119,33 @@ const STORE_COLS = `id, name, owner_name AS ownerName, phone, whatsapp, lat, lng
   region_id AS regionId, notes, code, address, account_type AS accountType, status,
   map_show AS mapShow, category, shop_class AS shopClass, manager_name AS managerName, governate`;
 
-/** يبني شروط الفلترة المشتركة بين اللائحة والتصدير */
-function buildStoreFilters(query) {
+/** يبني شروط الفلترة المشتركة بين اللائحة والتصدير والتقارير */
+function buildStoreFilters(query, a = 'stores.') {
   const where = [];
   const params = [];
   const like = (col, val) => { where.push(`${col} LIKE ?`); params.push(`%${val}%`); };
   const eq = (col, val) => { where.push(`${col} = ?`); params.push(val); };
 
-  if (query.q) { where.push('(name LIKE ? OR CAST(code AS TEXT) LIKE ?)'); params.push(`%${query.q}%`, `%${query.q}%`); }
-  if (query.code) like('CAST(code AS TEXT)', query.code);
-  if (query.name) like('name', query.name);
-  if (query.address) like('address', query.address);
-  if (query.managerName) like('manager_name', query.managerName);
-  if (query.phone) { where.push('(phone LIKE ? OR whatsapp LIKE ?)'); params.push(`%${query.phone}%`, `%${query.phone}%`); }
-  if (query.regionId) eq('region_id', Number(query.regionId));
-  if (query.governate) eq('governate', query.governate);
-  if (query.category) eq('category', query.category);
-  if (query.shopClass) eq('shop_class', query.shopClass);
-  if (query.status === 'active') where.push("(status IS NULL OR status = '')");
-  else if (query.status) eq('status', query.status);
-  if (query.mapShow === '1' || query.mapShow === '0') eq('map_show', Number(query.mapShow));
-  if (query.hasCoords === '1') where.push('lat IS NOT NULL AND lng IS NOT NULL');
-  if (query.hasCoords === '0') where.push('(lat IS NULL OR lng IS NULL)');
-  if (query.repName) { where.push('EXISTS (SELECT 1 FROM visits v WHERE v.store_id = stores.id AND v.rep_name = ?)'); params.push(query.repName); }
-  if (query.visitDay) { where.push('EXISTS (SELECT 1 FROM visits v WHERE v.store_id = stores.id AND v.visit_day = ?)'); params.push(query.visitDay); }
+  if (query.q) { where.push(`(${a}name LIKE ? OR CAST(${a}code AS TEXT) LIKE ?)`); params.push(`%${query.q}%`, `%${query.q}%`); }
+  if (query.code) like(`CAST(${a}code AS TEXT)`, query.code);
+  if (query.name) like(`${a}name`, query.name);
+  if (query.address) like(`${a}address`, query.address);
+  if (query.managerName) like(`${a}manager_name`, query.managerName);
+  if (query.phone) { where.push(`(${a}phone LIKE ? OR ${a}whatsapp LIKE ?)`); params.push(`%${query.phone}%`, `%${query.phone}%`); }
+  if (query.regionId) eq(`${a}region_id`, Number(query.regionId));
+  if (query.governate) eq(`${a}governate`, query.governate);
+  if (query.category) eq(`${a}category`, query.category);
+  if (query.shopClass) eq(`${a}shop_class`, query.shopClass);
+  if (query.accountType) eq(`${a}account_type`, query.accountType);
+  if (query.status === 'active') where.push(`(${a}status IS NULL OR ${a}status = '')`);
+  else if (query.status) eq(`${a}status`, query.status);
+  if (query.mapShow === '1' || query.mapShow === '0') eq(`${a}map_show`, Number(query.mapShow));
+  if (query.hasCoords === '1') where.push(`${a}lat IS NOT NULL AND ${a}lng IS NOT NULL`);
+  if (query.hasCoords === '0') where.push(`(${a}lat IS NULL OR ${a}lng IS NULL)`);
+  if (query.hasVisits === '1') where.push(`EXISTS (SELECT 1 FROM visits v WHERE v.store_id = ${a}id)`);
+  if (query.hasVisits === '0') where.push(`NOT EXISTS (SELECT 1 FROM visits v WHERE v.store_id = ${a}id)`);
+  if (query.repName) { where.push(`EXISTS (SELECT 1 FROM visits v WHERE v.store_id = ${a}id AND v.rep_name = ?)`); params.push(query.repName); }
+  if (query.visitDay) { where.push(`EXISTS (SELECT 1 FROM visits v WHERE v.store_id = ${a}id AND v.visit_day = ?)`); params.push(query.visitDay); }
 
   return { whereSql: where.length ? ' WHERE ' + where.join(' AND ') : '', params };
 }
@@ -166,19 +169,59 @@ function visitsForStores(ids) {
 adminRouter.get('/stores', (req, res) => {
   const { whereSql, params } = buildStoreFilters(req.query);
   const page = Math.max(1, Number(req.query.page) || 1);
-  const pageSize = Math.min(500, Math.max(10, Number(req.query.pageSize) || 50));
+  const all = req.query.pageSize === 'all';
+  const pageSize = all ? 0 : Math.min(500, Math.max(10, Number(req.query.pageSize) || 50));
 
   const total = db.prepare(`SELECT COUNT(*) AS c FROM stores${whereSql}`).get(...params).c;
-  const rows = db
-    .prepare(`SELECT ${STORE_COLS} FROM stores${whereSql} ORDER BY name LIMIT ? OFFSET ?`)
-    .all(...params, pageSize, (page - 1) * pageSize);
+  const rows = all
+    ? db.prepare(`SELECT ${STORE_COLS} FROM stores${whereSql} ORDER BY name`).all(...params)
+    : db.prepare(`SELECT ${STORE_COLS} FROM stores${whereSql} ORDER BY name LIMIT ? OFFSET ?`)
+        .all(...params, pageSize, (page - 1) * pageSize);
 
   const visitsMap = visitsForStores(rows.map((r) => r.id));
   const withVisits = rows.map((r) => ({
     ...r,
     visits: visitsMap.get(r.id) ?? [],
   }));
-  res.json({ rows: withVisits, total, page, pageSize });
+  res.json({ rows: withVisits, total, page, pageSize: all ? total : pageSize });
+});
+
+// تعديل جماعي: إما قائمة معرفات صريحة أو كل النتائج المطابقة للفلاتر
+const BULK_EDITABLE = {
+  mapShow: (v) => ['map_show', v ? 1 : 0],
+  status: (v) => ['status', v || null],
+  regionId: (v) => ['region_id', v ? Number(v) : null],
+  governate: (v) => ['governate', v || null],
+  category: (v) => ['category', v || null],
+  shopClass: (v) => ['shop_class', v || null],
+  managerName: (v) => ['manager_name', v || null],
+  accountType: (v) => ['account_type', v || null],
+};
+
+adminRouter.post('/stores/bulk-update', (req, res) => {
+  const { ids, allFiltered, filters = {}, set = {} } = req.body || {};
+  const entries = Object.entries(set)
+    .filter(([k]) => BULK_EDITABLE[k])
+    .map(([k, v]) => BULK_EDITABLE[k](v));
+  if (!entries.length) return res.status(400).json({ error: 'لا يوجد حقل صالح للتعديل' });
+
+  let targetIds = Array.isArray(ids) ? ids.map(Number).filter(Number.isFinite) : null;
+  if (!targetIds) {
+    if (!allFiltered) return res.status(400).json({ error: 'حدد صفوفاً أو فعّل التحديد بالفلاتر' });
+    const { whereSql, params } = buildStoreFilters(filters);
+    targetIds = db.prepare(`SELECT id FROM stores${whereSql}`).all(...params).map((r) => r.id);
+  }
+  if (!targetIds.length) return res.json({ updated: 0 });
+
+  const setSql = entries.map(([col]) => `${col} = ?`).join(', ');
+  const setParams = entries.map(([, v]) => v);
+  const stmt = db.prepare(`UPDATE stores SET ${setSql} WHERE id = ?`);
+  let updated = 0;
+  withTransaction(() => {
+    for (const id of targetIds) updated += stmt.run(...setParams, id).changes;
+  });
+  bumpDataVersion();
+  res.json({ updated });
 });
 
 // قيم الفلاتر المميزة للقوائم المنسدلة
@@ -190,6 +233,7 @@ adminRouter.get('/stores/filter-options', (req, res) => {
     governates: distinct('governate'),
     categories: distinct('category'),
     shopClasses: distinct('shop_class'),
+    accountTypes: distinct('account_type'),
     statuses: distinct('status'),
     reps: db.prepare("SELECT DISTINCT rep_name AS v FROM visits WHERE rep_name IS NOT NULL AND rep_name != '' ORDER BY v").all().map((r) => r.v),
     visitDays: db.prepare("SELECT DISTINCT visit_day AS v FROM visits WHERE visit_day IS NOT NULL AND visit_day != '' ORDER BY v").all().map((r) => r.v),
@@ -306,10 +350,11 @@ adminRouter.get('/reports/pivot', (req, res) => {
   const fromSql = 'FROM stores s' + (usesVisits ? ' LEFT JOIN visits v ON v.store_id = s.id' : '');
   const metricSql = metric === 'visits' ? 'COUNT(v.id)' : 'COUNT(DISTINCT s.id)';
 
+  const { whereSql, params } = buildStoreFilters(req.query, 's.');
   const colExpr = colsDim ? colsDim.expr : `'(الكل)'`;
   const rows = db
-    .prepare(`SELECT ${rowsDim.expr} AS rk, ${colExpr} AS ck, ${metricSql} AS c ${fromSql} GROUP BY rk, ck`)
-    .all();
+    .prepare(`SELECT ${rowsDim.expr} AS rk, ${colExpr} AS ck, ${metricSql} AS c ${fromSql}${whereSql} GROUP BY rk, ck`)
+    .all(...params);
 
   const rowLabels = [...new Set(rows.map((r) => r.rk))].sort();
   const colLabels = [...new Set(rows.map((r) => r.ck))].sort();

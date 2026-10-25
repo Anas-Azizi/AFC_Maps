@@ -99,13 +99,18 @@ export const api = {
     URL.revokeObjectURL(url);
   },
   reportDimensions: () => request('/api/admin/reports/dimensions'),
-  pivotReport: ({ rows, cols, metric } = {}) => {
+  pivotReport: ({ rows, cols, metric, ...filters } = {}) => {
     const params = new URLSearchParams();
     if (rows) params.set('rows', rows);
     if (cols) params.set('cols', cols);
     if (metric) params.set('metric', metric);
+    for (const [key, value] of Object.entries(filters)) {
+      if (value === undefined || value === null || value === '') continue;
+      params.set(key, value);
+    }
     return request(`/api/admin/reports/pivot?${params.toString()}`);
   },
+  bulkUpdateStores: (payload) => request('/api/admin/stores/bulk-update', { method: 'POST', body: payload }),
   getStore: (id) => request(`/api/admin/stores/${id}`),
   createStore: (s) => request('/api/admin/stores', { method: 'POST', body: s }),
   updateStore: (id, s) => request(`/api/admin/stores/${id}`, { method: 'PUT', body: s }),
