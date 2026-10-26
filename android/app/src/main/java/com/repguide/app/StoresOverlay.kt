@@ -31,15 +31,15 @@ class StoresOverlay(
     var highlightedId: Int? = null
 
     /** الحد الأدنى لمستوى التكبير لإظهار الدبابيس الكاملة مع النصوص */
-    var minLabelZoom = 14.0
+    var minLabelZoom = 16.0
 
     /** تحت هذا المستوى تُرسم نقاط صغيرة بدل الدبابيس */
-    var dotZoom = 12.0
+    var dotZoom = 13.5
 
     private val density = mapView.context.resources.displayMetrics.density
     private val appContext = mapView.context
     private val pinSize = (30 * density).toInt()
-    private val pinSmallSize = (16 * density).toInt()
+    private val pinSmallSize = (12 * density).toInt()
     private fun pinBitmap(size: Int): Bitmap {
         val drawable = ContextCompat.getDrawable(appContext, R.drawable.ic_pin)!!
         val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
@@ -109,7 +109,7 @@ class StoresOverlay(
         val showLabels = zoom >= minLabelZoom
         val dotMode = zoom < dotZoom
         val smallMode = !dotMode && !showLabels
-        val dotRadius = 4f * density
+        val dotRadius = 3f * density
         val lineH = namePaint.fontSpacing
         val padH = 6 * density
         val padV = 3 * density
