@@ -99,6 +99,11 @@ class MainActivity : AppCompatActivity() {
     private var selectedRegionId: Int? = null
     private var renderedRegions: List<RegionEntity>? = null
     private var routeLine: Polyline? = null
+    private var routeOutline: Polyline? = null
+    private var visibleStoreIds: Set<Int>? = null
+    private var repNames: List<String> = emptyList()
+    private var repFilter: String? = null
+    private var pinsHidden = false
     private lateinit var suggestionAdapter: StoreListAdapter
 
     private val locationPermissionLauncher =
@@ -121,7 +126,7 @@ class MainActivity : AppCompatActivity() {
         // أقصى تكبير مفيد: OSM تقدم بلاطات حقيقية حتى z19، ومن z20 إلى z22 يعرض التطبيق تقريباً مكبّراً من أدنى مستوى متوفر
         binding.map.minZoomLevel = 10.0
         binding.map.maxZoomLevel = 22.0
-        binding.map.controller.setZoom(12.0)
+        binding.map.controller.setZoom(15.0)
         binding.map.controller.setCenter(ALEPPO)
         setupTileProvider()
         storeOverlay = StoresOverlay(binding.map) { store ->
@@ -130,6 +135,8 @@ class MainActivity : AppCompatActivity() {
         binding.map.overlays.add(regionOverlay)
         binding.map.overlays.add(storeOverlay)
         binding.map.overlays.add(labelOverlay)
+        pinsHidden = Prefs.pinsHidden(this)
+        if (pinsHidden) binding.map.overlays.remove(storeOverlay)
 
         myLocationOverlay = MyLocationNewOverlay(GpsMyLocationProvider(this), binding.map)
         binding.map.overlays.add(myLocationOverlay)
@@ -196,6 +203,9 @@ class MainActivity : AppCompatActivity() {
                         vm.consumeEvent()
                     }
                     binding.syncButton.isEnabled = !state.syncing
+                    visibleStoreIds = state.visibleStoreIds
+                    repNames = state.repNames
+                    repFilter = state.repFilter
                     binding.statusText.text = if (state.syncing) {
                         getString(R.string.syncing)
                     } else {
@@ -208,6 +218,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         vm.loadLocal()
+        vm.refreshPermissions()
     }
 
     private fun onDataChanged(newRegions: List<RegionEntity>, newStores: List<StoreEntity>, newLandmarks: List<LandmarkEntity>) {
@@ -311,9 +322,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun applyFilters() {
         val query = normalizeArabic(binding.searchInput.text?.toString().orEmpty())
+        val ids = visibleStoreIds
         val filtered = stores.filter { store ->
             (selectedRegionId == null || store.regionId == selectedRegionId) &&
-                    (query.isEmpty() || normalizeArabic(store.name).contains(query))
+                    (query.isEmpty() || normalizeArabic(store.name).contains(query)) &&
+                    (ids == null || store.id in ids)
         }
         // المحلات بلا إحداثيات تظهر في البحث والقوائم لكن ليس على الخريطة
         storeOverlay.stores = filtered.filter { it.lat != null && it.lng != null }
@@ -349,9 +362,11 @@ class MainActivity : AppCompatActivity() {
         }
         val query = normalizeArabic(raw)
         val digits = digitsOnly(raw)
+        val ids = visibleStoreIds
         val startsWith = mutableListOf<StoreEntity>()
         val contains = mutableListOf<StoreEntity>()
         for (store in stores) {
+            if (ids != null && store.id !in ids) continue
             val name = normalizeArabic(store.name)
             val nameMatch = name.contains(query)
             val digitsMatch = digits.isNotEmpty() &&
@@ -393,7 +408,8 @@ class MainActivity : AppCompatActivity() {
         // مسح نص البحث لتعود كل المحلات للظهور — الاختيار للانتقال فقط وليس فلترة
         binding.searchInput.text?.clear()
         binding.regionSpinner.setSelection(0)
-        highlightAndZoomTo(store)
+        // محل بلا إحداثيات: نفتح بطاقته مباشرة — يظهر فيها تنبيه غياب الموقع
+        if (store.lat != null && store.lng != null) highlightAndZoomTo(store)
         showStoreDetail(store, regionNameOf(store))
     }
 
@@ -421,8 +437,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun showRegionStores(regionId: Int) {
         val region = regionsById[regionId] ?: return
+        val ids = visibleStoreIds
         val regionStores = stores
-            .filter { it.regionId == regionId }
+            .filter { it.regionId == regionId && (ids == null || it.id in ids) }
             .sortedBy { normalizeArabic(it.name) }
         if (regionStores.isEmpty()) return
         val items = regionStores.map {
@@ -433,7 +450,7 @@ class MainActivity : AppCompatActivity() {
             getString(R.string.region_stores_title, region.name, regionStores.size),
             items
         ) { store ->
-            highlightAndZoomTo(store)
+            if (store.lat != null && store.lng != null) highlightAndZoomTo(store)
             showStoreDetail(store, region.name)
         }
     }
@@ -448,47 +465,88 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showMenu() {
+        val perms = Prefs.permissions(this)
         val popup = PopupMenu(this, binding.menuButton)
-        popup.menu.add(getString(R.string.new_store))
+        if (perms.canAddStore) popup.menu.add(getString(R.string.new_store))
         popup.menu.add(getString(R.string.sync))
         if (routeLine != null) popup.menu.add(getString(R.string.clear_route))
         popup.menu.add(getString(if (landmarksVisible) R.string.hide_landmarks else R.string.show_landmarks))
-        popup.menu.add(getString(R.string.server_settings))
-        popup.menu.add(
-            getString(
-                if (offlinePackageFile().exists()) R.string.offline_maps_installed
-                else R.string.offline_maps_download
+        popup.menu.add(getString(if (pinsHidden) R.string.show_pins else R.string.hide_pins))
+        if (perms.canFilterByRep) {
+            val label = getString(R.string.rep_filter) +
+                    (repFilter?.let { ": $it" } ?: "")
+            popup.menu.add(label)
+        }
+        if (perms.showServerAddress) popup.menu.add(getString(R.string.server_settings))
+        if (perms.canDownloadMaps) {
+            popup.menu.add(
+                getString(
+                    if (offlinePackageFile().exists()) R.string.offline_maps_installed
+                    else R.string.offline_maps_download
+                )
             )
-        )
+        }
         popup.menu.add(getString(R.string.logout))
         popup.setOnMenuItemClickListener { item ->
-            when (item.title.toString()) {
-                getString(R.string.new_store) -> showNewStoreDialog()
-                getString(R.string.sync) -> vm.sync()
-                getString(R.string.clear_route) -> clearRoute()
-                getString(R.string.show_landmarks),
-                getString(R.string.hide_landmarks) -> toggleLandmarks()
-                getString(R.string.server_settings) -> showServerDialog()
-                getString(R.string.logout) -> logout(showMessage = false)
-                getString(R.string.offline_maps_download),
-                getString(R.string.offline_maps_installed) -> onOfflineMapsClicked()
+            val title = item.title.toString()
+            when {
+                title == getString(R.string.new_store) -> showNewStoreDialog()
+                title == getString(R.string.sync) -> vm.sync()
+                title == getString(R.string.clear_route) -> clearRoute()
+                title == getString(R.string.show_landmarks) ||
+                        title == getString(R.string.hide_landmarks) -> toggleLandmarks()
+                title == getString(R.string.hide_pins) ||
+                        title == getString(R.string.show_pins) -> togglePins()
+                title.startsWith(getString(R.string.rep_filter)) -> showRepFilterDialog()
+                title == getString(R.string.server_settings) -> showServerDialog()
+                title == getString(R.string.logout) -> logout(showMessage = false)
+                title == getString(R.string.offline_maps_download) ||
+                        title == getString(R.string.offline_maps_installed) -> onOfflineMapsClicked()
             }
             true
         }
         popup.show()
     }
 
+    /** إخفاء/إظهار دبابيس المحلات فقط — تبقى المناطق والتسميات والمعالم ظاهرة */
+    private fun togglePins() {
+        pinsHidden = !pinsHidden
+        Prefs.setPinsHidden(this, pinsHidden)
+        if (pinsHidden) {
+            binding.map.overlays.remove(storeOverlay)
+        } else if (!binding.map.overlays.contains(storeOverlay)) {
+            val idx = binding.map.overlays.indexOf(regionOverlay)
+            binding.map.overlays.add(if (idx >= 0) idx + 1 else 0, storeOverlay)
+        }
+        binding.map.invalidate()
+    }
+
+    private fun showRepFilterDialog() {
+        val options = listOf(getString(R.string.all_reps)) + repNames
+        val current = repFilter
+        val checked = current?.let { repNames.indexOf(it) + 1 } ?: 0
+        AlertDialog.Builder(this)
+            .setTitle(R.string.rep_filter)
+            .setSingleChoiceItems(options.toTypedArray(), checked) { dialog, which ->
+                vm.setRepFilter(if (which <= 0) null else repNames.getOrNull(which - 1))
+                dialog.dismiss()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
     private fun onStoreAction(store: StoreEntity, action: Int) {
         when (action) {
             StoreDetailSheet.ACTION_DRAW_ROUTE -> drawRouteTo(store)
-            StoreDetailSheet.ACTION_UPDATE_LOCATION -> {
+            StoreDetailSheet.ACTION_UPDATE_LOCATION,
+            StoreDetailSheet.ACTION_SET_LOCATION -> {
                 val loc = currentLocationOrWarn() ?: return
                 AlertDialog.Builder(this)
                     .setTitle(R.string.update_location)
                     .setMessage(
                         getString(
                             R.string.confirm_update_location,
-                            store.name,
+                            storeLabel(store),
                             loc.latitude,
                             loc.longitude
                         )
@@ -506,6 +564,10 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+
+    /** اسم المحل مع الكود إن وُجد: «اسم المحل (الكود: N)» */
+    private fun storeLabel(store: StoreEntity): String =
+        store.code?.let { getString(R.string.store_name_with_code, store.name, it) } ?: store.name
 
     private fun drawRouteTo(store: StoreEntity) {
         if (store.lat == null || store.lng == null) {
@@ -539,13 +601,20 @@ class MainActivity : AppCompatActivity() {
 
     private fun showRoute(route: ApiClient.Route) {
         clearRoute()
+        val points = route.points.map { GeoPoint(it[0], it[1]) }
+        // إطار أبيض سميك تحت الخط الرئيسي ليتميز المسار عن المضلعات والتسميات
+        val outline = Polyline(binding.map)
+        outline.outlinePaint.color = Color.WHITE
+        outline.outlinePaint.strokeWidth = 14f
+        outline.setPoints(points)
         val line = Polyline(binding.map)
         line.outlinePaint.color = Color.parseColor("#1565C0")
         line.outlinePaint.strokeWidth = 10f
-        val points = route.points.map { GeoPoint(it[0], it[1]) }
         line.setPoints(points)
         // تحت الدبابيس والمضلعات
-        binding.map.overlays.add(0, line)
+        binding.map.overlays.add(0, outline)
+        binding.map.overlays.add(1, line)
+        routeOutline = outline
         routeLine = line
         val km = route.distanceMeters / 1000.0
         val minutes = Math.round(route.durationSeconds / 60.0)
@@ -563,6 +632,8 @@ class MainActivity : AppCompatActivity() {
     private fun clearRoute() {
         routeLine?.let { binding.map.overlays.remove(it) }
         routeLine = null
+        routeOutline?.let { binding.map.overlays.remove(it) }
+        routeOutline = null
         binding.map.invalidate()
     }
 
@@ -585,7 +656,7 @@ class MainActivity : AppCompatActivity() {
             addView(input)
         }
         AlertDialog.Builder(this)
-            .setTitle(getString(R.string.note_dialog_title, store.name))
+            .setTitle(getString(R.string.note_dialog_title, storeLabel(store)))
             .setView(container)
             .setPositiveButton(R.string.send) { _, _ ->
                 val note = input.text?.toString()?.trim().orEmpty()

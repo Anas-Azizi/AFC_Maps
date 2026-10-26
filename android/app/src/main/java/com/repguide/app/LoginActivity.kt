@@ -50,6 +50,7 @@ class LoginActivity : AppCompatActivity() {
                     )
                 }
                 Prefs.saveSession(this@LoginActivity, result.token, result.userName)
+                Prefs.setPermissions(this@LoginActivity, result.permissions)
                 openMain()
             } catch (e: ApiClient.ApiException) {
                 setLoading(false)

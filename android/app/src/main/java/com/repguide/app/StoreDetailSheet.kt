@@ -20,6 +20,7 @@ class StoreDetailSheet : BottomSheetDialogFragment() {
         const val ACTION_ADD_NOTE = 2
         const val ACTION_UPDATE_BOTH = 3
         const val ACTION_DRAW_ROUTE = 4
+        const val ACTION_SET_LOCATION = 5
 
         private const val ARG_ID = "id"
         private const val ARG_NAME = "name"
@@ -62,6 +63,7 @@ class StoreDetailSheet : BottomSheetDialogFragment() {
     ): View {
         val binding = DialogStoreBinding.inflate(inflater, container, false)
         val args = requireArguments()
+        val perms = Prefs.permissions(requireContext())
 
         binding.storeNameText.text = args.getString(ARG_NAME).orEmpty()
 
@@ -70,7 +72,8 @@ class StoreDetailSheet : BottomSheetDialogFragment() {
         binding.ownerValue.text = owner.orEmpty()
 
         val phone = args.getString(ARG_PHONE)
-        binding.rowPhone.visibility = if (phone.isNullOrBlank()) View.GONE else View.VISIBLE
+        binding.rowPhone.visibility =
+            if (phone.isNullOrBlank() || !perms.showPhone) View.GONE else View.VISIBLE
         binding.phoneValue.text = phone.orEmpty()
         val dial = {
             if (!phone.isNullOrBlank()) {
@@ -108,9 +111,14 @@ class StoreDetailSheet : BottomSheetDialogFragment() {
         bindRow(binding.rowManager, binding.managerValue, store2?.managerName)
         bindRow(binding.rowGovernate, binding.governateValue, store2?.governate)
         bindRow(binding.rowAddress, binding.addressValue, store2?.address)
+        if (!perms.showCategory) binding.rowCategory.visibility = View.GONE
+        if (!perms.showShopClass) binding.rowShopClass.visibility = View.GONE
+        if (!perms.showGovernate) binding.rowGovernate.visibility = View.GONE
+        if (!perms.showAddress) binding.rowAddress.visibility = View.GONE
 
         val whatsapp = store2?.whatsapp
         bindRow(binding.rowWhatsapp, binding.whatsappValue, whatsapp)
+        if (!perms.showWhatsapp) binding.rowWhatsapp.visibility = View.GONE
         binding.rowWhatsapp.setOnClickListener {
             val digits = whatsappToInternational(whatsapp)
             if (digits.isNotEmpty()) {
@@ -122,7 +130,12 @@ class StoreDetailSheet : BottomSheetDialogFragment() {
             }
         }
 
-        buildVisitsRows(binding, pendingVisits)
+        if (perms.showVisits) {
+            buildVisitsRows(binding, pendingVisits)
+        } else {
+            binding.visitsTitle.visibility = View.GONE
+            binding.visitsContainer.visibility = View.GONE
+        }
 
         val notes = args.getString(ARG_NOTES)
         binding.rowNotes.visibility = if (notes.isNullOrBlank()) View.GONE else View.VISIBLE
@@ -132,7 +145,20 @@ class StoreDetailSheet : BottomSheetDialogFragment() {
         val store = pendingStore
         // مشاركة موقع الزبون عبر واتساب برابط Google Maps — متاح كلما وُجدت إحداثيات
         val storeName = args.getString(ARG_NAME).orEmpty()
-        if (store?.lat == null || store.lng == null) {
+        val hasCoords = store?.lat != null && store.lng != null
+
+        // محل بلا إحداثيات: شريط تنبيه مع زر يبدأ مسار تحديد الموقع على الخريطة
+        binding.noLocationBanner.visibility = if (hasCoords) View.GONE else View.VISIBLE
+        if (!hasCoords && store != null) {
+            binding.setLocationButton.visibility =
+                if (onAction != null && perms.canUpdateLocation) View.VISIBLE else View.GONE
+            binding.setLocationButton.setOnClickListener {
+                dismiss()
+                onAction?.invoke(store, ACTION_SET_LOCATION)
+            }
+        }
+
+        if (!hasCoords || !perms.canShareLocation || store == null) {
             binding.shareLocationButton.visibility = View.GONE
         } else {
             binding.shareLocationButton.setOnClickListener {
@@ -155,6 +181,12 @@ class StoreDetailSheet : BottomSheetDialogFragment() {
                 }
             }
         }
+        // رسم المسار يتطلب إحداثيات للزبون
+        if (!hasCoords) binding.drawRouteButton.visibility = View.GONE
+        if (!perms.canDrawRoute) binding.drawRouteButton.visibility = View.GONE
+        if (!perms.canUpdateLocation) binding.updateLocationButton.visibility = View.GONE
+        if (!perms.canAddNote) binding.addNoteButton.visibility = View.GONE
+        if (!perms.canUpdateBoth) binding.updateBothButton.visibility = View.GONE
         if (onAction == null || store == null) {
             binding.drawRouteButton.visibility = View.GONE
             binding.updateLocationButton.visibility = View.GONE

@@ -1,11 +1,103 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api.js';
+import MultiSelect from '../components/MultiSelect.jsx';
 
 const emptyForm = { name: '', username: '', password: '', role: 'rep' };
 
+const DEFAULT_PERMISSIONS = {
+  reps: null,
+  canFilterByRep: true,
+  showPhone: true,
+  showWhatsapp: true,
+  showVisits: true,
+  showCategory: true,
+  showShopClass: true,
+  showGovernate: true,
+  showAddress: true,
+  canAddNote: true,
+  canDrawRoute: true,
+  canShareLocation: true,
+  canUpdateLocation: true,
+  canUpdateBoth: true,
+  canAddStore: true,
+  showServerAddress: true,
+  canDownloadMaps: true,
+};
+
+const PERMISSION_FIELDS = [
+  ['canFilterByRep', 'فلترة الدبابيس حسب المندوب'],
+  ['showPhone', 'رؤية رقم الهاتف'],
+  ['showWhatsapp', 'رؤية رقم الواتس'],
+  ['showVisits', 'رؤية زيارات المندوبين'],
+  ['showCategory', 'رؤية طبيعة العمل'],
+  ['showShopClass', 'رؤية الفئة'],
+  ['showGovernate', 'رؤية المحافظة'],
+  ['showAddress', 'رؤية العنوان'],
+  ['canAddNote', 'إضافة ملاحظة'],
+  ['canDrawRoute', 'رسم المسار'],
+  ['canShareLocation', 'مشاركة الموقع واتساب'],
+  ['canUpdateLocation', 'تحديث الموقع'],
+  ['canUpdateBoth', 'تحديث الموقع مع ملاحظة'],
+  ['canAddStore', 'تسجيل محل جديد'],
+  ['showServerAddress', 'رؤية عنوان الخادم'],
+  ['canDownloadMaps', 'تنزيل الخرائط أوفلاين'],
+];
+
+function isDefaultPermissions(perms) {
+  if (!perms) return true;
+  if (perms.reps != null && (!Array.isArray(perms.reps) || perms.reps.length)) return false;
+  return PERMISSION_FIELDS.every(([key]) => perms[key] !== false);
+}
+
+function PermissionsEditor({ value, onChange, reps }) {
+  const effective = { ...DEFAULT_PERMISSIONS, ...(value || {}) };
+  const repOptions = reps.map((r) => ({ value: r, label: r }));
+
+  const setKey = (key, checked) => onChange({ ...effective, [key]: checked });
+
+  return (
+    <div className="perms-editor">
+      <h2>صلاحيات التطبيق</h2>
+      <div className="perms-grid">
+        {PERMISSION_FIELDS.map(([key, label]) => (
+          <label key={key}>
+            <input
+              type="checkbox"
+              checked={!!effective[key]}
+              onChange={(e) => setKey(key, e.target.checked)}
+            />
+            {label}
+          </label>
+        ))}
+      </div>
+      <div className="form-field" style={{ marginTop: 12, maxWidth: 420 }}>
+        <label>تقييد الرؤية بمندوبين محددين</label>
+        <MultiSelect
+          options={repOptions}
+          value={effective.reps ?? []}
+          onChange={(arr) => onChange({ ...effective, reps: arr.length ? arr : null })}
+          placeholder="كل المندوبين"
+        />
+        <span className="muted">فارغ = يرى زبائن كل المندوبين</span>
+      </div>
+      <div className="btn-row" style={{ marginTop: 8 }}>
+        <button type="button" className="btn btn-secondary btn-small" onClick={() => onChange(null)}>
+          إعادة للافتراضي
+        </button>
+        {value === null && <span className="muted">الصلاحيات حالياً على الوضع الافتراضي (كاملة)</span>}
+      </div>
+    </div>
+  );
+}
+
 export default function Users() {
   const [users, setUsers] = useState([]);
+  const [reps, setReps] = useState([]);
   const [form, setForm] = useState(emptyForm);
+  const [perms, setPerms] = useState(null);
+  const [editUser, setEditUser] = useState(null);
+  const [editForm, setEditForm] = useState({ name: '', role: 'rep' });
+  const [editPerms, setEditPerms] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [busy, setBusy] = useState(false);
@@ -16,15 +108,48 @@ export default function Users() {
 
   useEffect(load, [load]);
 
+  useEffect(() => {
+    api.filterOptions().then((o) => setReps(o.reps || [])).catch(() => {});
+  }, []);
+
   const onCreate = async (e) => {
     e.preventDefault();
     setError('');
     setSuccess('');
     setBusy(true);
     try {
-      await api.createUser(form);
+      await api.createUser({ ...form, permissions: perms });
       setForm(emptyForm);
+      setPerms(null);
       setSuccess('تم إنشاء المستخدم بنجاح');
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openEdit = (u) => {
+    setEditUser(u);
+    setEditForm({ name: u.name, role: u.role });
+    setEditPerms(isDefaultPermissions(u.permissions) ? null : u.permissions);
+  };
+
+  const onSaveEdit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+    setBusy(true);
+    try {
+      await api.updateUser(editUser.id, {
+        name: editForm.name,
+        role: editForm.role,
+        active: editUser.active,
+        permissions: editPerms,
+      });
+      setSuccess('تم حفظ التعديلات بنجاح');
+      setEditUser(null);
       load();
     } catch (err) {
       setError(err.message);
@@ -112,7 +237,10 @@ export default function Users() {
               </select>
             </div>
           </div>
-          <button className="btn btn-primary" type="submit" disabled={busy}>إضافة</button>
+          <PermissionsEditor value={perms} onChange={setPerms} reps={reps} />
+          <div style={{ marginTop: 16 }}>
+            <button className="btn btn-primary" type="submit" disabled={busy}>إضافة</button>
+          </div>
         </form>
       </div>
 
@@ -124,6 +252,7 @@ export default function Users() {
               <th>اسم المستخدم</th>
               <th>الدور</th>
               <th>الحالة</th>
+              <th>الصلاحيات</th>
               <th>إجراءات</th>
             </tr>
           </thead>
@@ -139,7 +268,15 @@ export default function Users() {
                   </span>
                 </td>
                 <td>
+                  <span className={`badge ${isDefaultPermissions(u.permissions) ? 'badge-green' : 'badge-gray'}`}>
+                    {isDefaultPermissions(u.permissions) ? 'كاملة' : 'مخصصة'}
+                  </span>
+                </td>
+                <td>
                   <div className="btn-row">
+                    <button className="btn btn-secondary btn-small" onClick={() => openEdit(u)}>
+                      تعديل
+                    </button>
                     <button className="btn btn-secondary btn-small" onClick={() => toggleActive(u)}>
                       {u.active ? 'تعطيل' : 'تفعيل'}
                     </button>
@@ -152,11 +289,54 @@ export default function Users() {
               </tr>
             ))}
             {users.length === 0 && (
-              <tr><td colSpan="5" className="muted">لا يوجد مستخدمون</td></tr>
+              <tr><td colSpan="6" className="muted">لا يوجد مستخدمون</td></tr>
             )}
           </tbody>
         </table>
       </div>
+
+      {editUser && (
+        <div className="modal-overlay" onClick={() => !busy && setEditUser(null)}>
+          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+            <h2>تعديل المستخدم: {editUser.name}</h2>
+            <form onSubmit={onSaveEdit}>
+              <div className="form-field" style={{ marginBottom: 12 }}>
+                <label>الاسم</label>
+                <input
+                  type="text"
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="form-field" style={{ marginBottom: 12 }}>
+                <label>الدور</label>
+                <select
+                  value={editForm.role}
+                  onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
+                >
+                  <option value="rep">مندوب</option>
+                  <option value="admin">مدير</option>
+                </select>
+              </div>
+              <PermissionsEditor value={editPerms} onChange={setEditPerms} reps={reps} />
+              <div className="btn-row" style={{ marginTop: 16 }}>
+                <button className="btn btn-primary" type="submit" disabled={busy}>
+                  {busy ? 'جارٍ الحفظ…' : 'حفظ'}
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  type="button"
+                  onClick={() => setEditUser(null)}
+                  disabled={busy}
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

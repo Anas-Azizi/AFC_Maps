@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
+import MultiSelect from '../components/MultiSelect.jsx';
 
 const METRICS = [
   { key: 'stores', label: 'عدد الزبائن' },
@@ -15,10 +16,8 @@ const PRESETS = [
   { label: 'بلا زيارات حسب المنطقة', rows: 'region', cols: 'hasVisits', metric: 'stores' },
 ];
 
-const REPORT_FILTER_KEYS = [
-  'regionId', 'governate', 'status', 'mapShow', 'category', 'shopClass',
-  'accountType', 'repName', 'visitDay', 'hasCoords', 'hasVisits',
-];
+const MULTI_KEYS = ['regionId', 'governate', 'category', 'shopClass', 'accountType', 'status', 'repName', 'visitDay'];
+const SINGLE_KEYS = ['mapShow', 'hasCoords', 'hasVisits'];
 
 const FILTER_LABELS = {
   regionId: 'المنطقة',
@@ -34,7 +33,12 @@ const FILTER_LABELS = {
   hasVisits: 'الزيارات',
 };
 
-const EMPTY_REPORT_FILTERS = Object.fromEntries(REPORT_FILTER_KEYS.map((k) => [k, '']));
+const EMPTY_REPORT_FILTERS = {
+  ...Object.fromEntries(SINGLE_KEYS.map((k) => [k, ''])),
+  ...Object.fromEntries(MULTI_KEYS.map((k) => [k, []])),
+};
+
+const EMPTY_OPT = { value: '__empty__', label: '(فارغ)' };
 
 function dimToFilter(dimKey, label, regions) {
   if (!label || label === '(فارغ)') return null;
@@ -44,7 +48,7 @@ function dimToFilter(dimKey, label, regions) {
       return r ? { regionId: String(r.id) } : null;
     }
     case 'status':
-      return { status: label === 'فعّال' ? 'active' : label };
+      return { status: label === 'فعّال' ? '__empty__' : label };
     case 'mapShow':
       return { mapShow: label === 'نعم' ? '1' : '0' };
     case 'hasCoords':
@@ -88,7 +92,11 @@ export default function Reports() {
   const activeFilters = () => {
     const out = {};
     for (const [k, v] of Object.entries(filters)) {
-      if (v !== '' && v !== undefined && v !== null) out[k] = v;
+      if (Array.isArray(v)) {
+        if (v.length) out[k] = v.join(',');
+      } else if (v !== '' && v !== undefined && v !== null) {
+        out[k] = v;
+      }
     }
     return out;
   };
@@ -118,30 +126,69 @@ export default function Reports() {
   const cellValue = (rowLabel, colLabel) =>
     data?.cells?.[`${rowLabel}||${colLabel}`] ?? 0;
 
+  const navigateWith = (extra) => {
+    const params = new URLSearchParams({ ...activeFilters(), ...extra });
+    navigate(`/stores?${params.toString()}`);
+  };
+
   const onCellClick = (rowLabel, colLabel) => {
     const rowFilter = dimToFilter(rowsDim, rowLabel, regions);
     const colFilter = colsDim ? dimToFilter(colsDim, colLabel, regions) : null;
     if (rowFilter === null || (colsDim && colFilter === null)) return;
-    const params = new URLSearchParams({ ...activeFilters(), ...rowFilter, ...(colFilter || {}) });
-    navigate(`/stores?${params.toString()}`);
+    navigateWith({ ...rowFilter, ...(colFilter || {}) });
+  };
+
+  const onRowTotalClick = (rowLabel) => {
+    const rowFilter = dimToFilter(rowsDim, rowLabel, regions);
+    if (rowFilter === null) return;
+    navigateWith(rowFilter);
+  };
+
+  const onColTotalClick = (colLabel) => {
+    if (!colsDim) return;
+    const colFilter = dimToFilter(colsDim, colLabel, regions);
+    if (colFilter === null) return;
+    navigateWith(colFilter);
   };
 
   const isCellClickable = (rowLabel, colLabel) =>
     dimToFilter(rowsDim, rowLabel, regions) !== null &&
     (!colsDim || dimToFilter(colsDim, colLabel, regions) !== null);
 
-  const filterValueLabel = (key, value) => {
-    if (key === 'regionId') return regions.find((r) => String(r.id) === String(value))?.name || value;
-    if (key === 'status') return value === 'active' ? 'فعّال' : value;
-    if (key === 'mapShow') return value === '1' ? 'نعم' : 'لا';
-    if (key === 'hasCoords') return value === '1' ? 'بإحداثيات' : 'بلا إحداثيات';
-    if (key === 'hasVisits') return value === '1' ? 'له زيارات' : 'بلا زيارات';
-    return value;
+  const isRowTotalClickable = (rowLabel) => dimToFilter(rowsDim, rowLabel, regions) !== null;
+
+  const isColTotalClickable = (colLabel) =>
+    !!colsDim && dimToFilter(colsDim, colLabel, regions) !== null;
+
+  const valueLabel = (key, v) => {
+    if (v === '__empty__') return key === 'status' ? 'فعّال' : '(فارغ)';
+    if (key === 'regionId') return regions.find((r) => String(r.id) === String(v))?.name || v;
+    if (key === 'mapShow') return v === '1' ? 'نعم' : 'لا';
+    if (key === 'hasCoords') return v === '1' ? 'بإحداثيات' : 'بلا إحداثيات';
+    if (key === 'hasVisits') return v === '1' ? 'له زيارات' : 'بلا زيارات';
+    return v;
   };
 
-  const activeFilterEntries = Object.entries(filters).filter(([, v]) => v !== '');
+  const filterEntryLabel = ([k, v]) =>
+    `${FILTER_LABELS[k]}=${(Array.isArray(v) ? v : [v]).map((x) => valueLabel(k, x)).join('،')}`;
+
+  const activeFilterEntries = Object.entries(filters).filter(([, v]) =>
+    Array.isArray(v) ? v.length > 0 : v !== ''
+  );
 
   const dimLabel = (key) => dimensions.find((d) => d.key === key)?.label || key;
+
+  const regionOptions = [EMPTY_OPT, ...regions.map((r) => ({ value: String(r.id), label: r.name }))];
+  const governateOptions = [EMPTY_OPT, ...options.governates.map((g) => ({ value: g, label: g }))];
+  const categoryOptions = [EMPTY_OPT, ...options.categories.map((c) => ({ value: c, label: c }))];
+  const shopClassOptions = [EMPTY_OPT, ...options.shopClasses.map((c) => ({ value: c, label: c }))];
+  const accountTypeOptions = [EMPTY_OPT, ...options.accountTypes.map((t) => ({ value: t, label: t }))];
+  const statusOptions = [
+    { value: '__empty__', label: 'فعّال' },
+    ...options.statuses.filter(Boolean).map((s) => ({ value: s, label: s })),
+  ];
+  const repOptions = options.reps.map((r) => ({ value: r, label: r }));
+  const visitDayOptions = options.visitDays.map((d) => ({ value: d, label: d }));
 
   const colLabels = data ? (data.colLabels?.length ? data.colLabels : ['(الكل)']) : [];
   const rowLabels = data?.rowLabels || [];
@@ -200,31 +247,15 @@ export default function Reports() {
         <div className="filters-row">
           <div className="form-field">
             <label>المنطقة</label>
-            <select value={filters.regionId} onChange={(e) => setFilter('regionId', e.target.value)}>
-              <option value="">الكل</option>
-              {regions.map((r) => (
-                <option key={r.id} value={r.id}>{r.name}</option>
-              ))}
-            </select>
+            <MultiSelect options={regionOptions} value={filters.regionId} onChange={(v) => setFilter('regionId', v)} />
           </div>
           <div className="form-field">
             <label>المحافظة</label>
-            <select value={filters.governate} onChange={(e) => setFilter('governate', e.target.value)}>
-              <option value="">الكل</option>
-              {options.governates.map((g) => (
-                <option key={g} value={g}>{g}</option>
-              ))}
-            </select>
+            <MultiSelect options={governateOptions} value={filters.governate} onChange={(v) => setFilter('governate', v)} />
           </div>
           <div className="form-field">
             <label>الحالة</label>
-            <select value={filters.status} onChange={(e) => setFilter('status', e.target.value)}>
-              <option value="">الكل</option>
-              <option value="active">فعّال</option>
-              {options.statuses.filter((s) => s).map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
+            <MultiSelect options={statusOptions} value={filters.status} onChange={(v) => setFilter('status', v)} />
           </div>
           <div className="form-field">
             <label>يظهر بالتطبيق</label>
@@ -236,48 +267,23 @@ export default function Reports() {
           </div>
           <div className="form-field">
             <label>طبيعة العمل</label>
-            <select value={filters.category} onChange={(e) => setFilter('category', e.target.value)}>
-              <option value="">الكل</option>
-              {options.categories.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
+            <MultiSelect options={categoryOptions} value={filters.category} onChange={(v) => setFilter('category', v)} />
           </div>
           <div className="form-field">
             <label>الفئة</label>
-            <select value={filters.shopClass} onChange={(e) => setFilter('shopClass', e.target.value)}>
-              <option value="">الكل</option>
-              {options.shopClasses.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
+            <MultiSelect options={shopClassOptions} value={filters.shopClass} onChange={(v) => setFilter('shopClass', v)} />
           </div>
           <div className="form-field">
             <label>نوع الحساب</label>
-            <select value={filters.accountType} onChange={(e) => setFilter('accountType', e.target.value)}>
-              <option value="">الكل</option>
-              {options.accountTypes.map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
+            <MultiSelect options={accountTypeOptions} value={filters.accountType} onChange={(v) => setFilter('accountType', v)} />
           </div>
           <div className="form-field">
             <label>المندوب</label>
-            <select value={filters.repName} onChange={(e) => setFilter('repName', e.target.value)}>
-              <option value="">الكل</option>
-              {options.reps.map((r) => (
-                <option key={r} value={r}>{r}</option>
-              ))}
-            </select>
+            <MultiSelect options={repOptions} value={filters.repName} onChange={(v) => setFilter('repName', v)} />
           </div>
           <div className="form-field">
             <label>يوم الزيارة</label>
-            <select value={filters.visitDay} onChange={(e) => setFilter('visitDay', e.target.value)}>
-              <option value="">الكل</option>
-              {options.visitDays.map((d) => (
-                <option key={d} value={d}>{d}</option>
-              ))}
-            </select>
+            <MultiSelect options={visitDayOptions} value={filters.visitDay} onChange={(v) => setFilter('visitDay', v)} />
           </div>
           <div className="form-field">
             <label>الإحداثيات</label>
@@ -300,7 +306,7 @@ export default function Reports() {
         {activeFilterEntries.length > 0 && (
           <div className="filters-row" style={{ alignItems: 'center' }}>
             <span className="muted">
-              فلاتر: {activeFilterEntries.map(([k, v]) => `${FILTER_LABELS[k]}=${filterValueLabel(k, v)}`).join('، ')}
+              فلاتر: {activeFilterEntries.map(filterEntryLabel).join('، ')}
             </span>
             <button
               type="button"
@@ -346,7 +352,13 @@ export default function Reports() {
                         </td>
                       );
                     })}
-                    <td className="pivot-total">{rowTotals[i]}</td>
+                    <td
+                      className={isRowTotalClickable(rl) ? 'pivot-total cell-link' : 'pivot-total'}
+                      onClick={isRowTotalClickable(rl) ? () => onRowTotalClick(rl) : undefined}
+                      title={isRowTotalClickable(rl) ? 'عرض زبائن هذا الصف' : undefined}
+                    >
+                      {rowTotals[i]}
+                    </td>
                   </tr>
                 ))}
                 {rowLabels.length === 0 && (
@@ -358,9 +370,22 @@ export default function Reports() {
                   <tr>
                     <th>الإجمالي</th>
                     {colTotals.map((t, i) => (
-                      <td key={i} className="pivot-total">{t}</td>
+                      <td
+                        key={i}
+                        className={isColTotalClickable(colLabels[i]) ? 'pivot-total cell-link' : 'pivot-total'}
+                        onClick={isColTotalClickable(colLabels[i]) ? () => onColTotalClick(colLabels[i]) : undefined}
+                        title={isColTotalClickable(colLabels[i]) ? 'عرض زبائن هذا العمود' : undefined}
+                      >
+                        {t}
+                      </td>
                     ))}
-                    <td className="pivot-total">{grandTotal}</td>
+                    <td
+                      className="pivot-total cell-link"
+                      onClick={() => navigateWith({})}
+                      title="عرض كل الزبائن المطابقين للفلاتر"
+                    >
+                      {grandTotal}
+                    </td>
                   </tr>
                 </tfoot>
               )}

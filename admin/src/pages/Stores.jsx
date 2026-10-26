@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api.js';
-
-const FILTER_KEYS = [
-  'q', 'code', 'name', 'address', 'managerName', 'phone',
-  'regionId', 'governate', 'category', 'shopClass', 'accountType', 'status', 'mapShow',
-  'repName', 'visitDay',
-];
+import MultiSelect from '../components/MultiSelect.jsx';
 
 const TEXT_KEYS = ['q', 'code', 'name', 'address', 'managerName', 'phone'];
+const MULTI_KEYS = ['regionId', 'governate', 'category', 'shopClass', 'accountType', 'status', 'repName', 'visitDay'];
+const SINGLE_KEYS = ['mapShow'];
 
-const EMPTY_FILTERS = Object.fromEntries(FILTER_KEYS.map((k) => [k, '']));
+const EMPTY_FILTERS = {
+  ...Object.fromEntries(TEXT_KEYS.concat(SINGLE_KEYS).map((k) => [k, ''])),
+  ...Object.fromEntries(MULTI_KEYS.map((k) => [k, []])),
+};
+
+const EMPTY_OPT = { value: '__empty__', label: '(فارغ)' };
 
 const ALL_COLUMNS = [
   { key: 'code', label: 'الكود' },
@@ -65,7 +67,8 @@ export default function Stores() {
 
   const [filters, setFilters] = useState(() => {
     const f = { ...EMPTY_FILTERS };
-    for (const k of FILTER_KEYS) f[k] = searchParams.get(k) || '';
+    for (const k of TEXT_KEYS.concat(SINGLE_KEYS)) f[k] = searchParams.get(k) || '';
+    for (const k of MULTI_KEYS) f[k] = (searchParams.get(k) || '').split(',').filter(Boolean);
     return f;
   });
   const [textValues, setTextValues] = useState(() => {
@@ -105,9 +108,10 @@ export default function Stores() {
 
   // مزامنة q و regionId مع عنوان الصفحة لتعمل روابط التنقل العميق
   useEffect(() => {
-    if ((searchParams.get('q') || '') === filters.q && (searchParams.get('regionId') || '') === filters.regionId) return;
+    const regionParam = filters.regionId.join(',');
+    if ((searchParams.get('q') || '') === filters.q && (searchParams.get('regionId') || '') === regionParam) return;
     const params = {};
-    if (filters.regionId) params.regionId = filters.regionId;
+    if (regionParam) params.regionId = regionParam;
     if (filters.q) params.q = filters.q;
     setSearchParams(params, { replace: true });
   }, [filters.q, filters.regionId, searchParams, setSearchParams]);
@@ -131,33 +135,39 @@ export default function Stores() {
     return () => clearTimeout(timer);
   }, [textValues]);
 
+  const toApiFilters = useCallback(() => {
+    const out = {};
+    for (const [k, v] of Object.entries(filters)) {
+      if (Array.isArray(v)) {
+        if (v.length) out[k] = v.join(',');
+      } else if (v !== '' && v !== undefined && v !== null) {
+        out[k] = v;
+      }
+    }
+    return out;
+  }, [filters]);
+
   const load = useCallback(() => {
     setLoading(true);
-    api.listStores({ ...filters, page, pageSize })
+    api.listStores({ ...toApiFilters(), page, pageSize })
       .then((res) => {
         setRows(res.rows || []);
         setTotal(res.total || 0);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [filters, page, pageSize]);
+  }, [toApiFilters, page, pageSize]);
 
   useEffect(load, [load]);
 
-  const regionName = (id) => regions.find((r) => r.id === id)?.name || '—';
+  const regionName = (id) => regions.find((r) => String(r.id) === String(id))?.name || '—';
 
   const setFilter = (key, value) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
     setPage(1);
   };
 
-  const activeFilters = () => {
-    const out = {};
-    for (const [k, v] of Object.entries(filters)) {
-      if (v !== '' && v !== undefined && v !== null) out[k] = v;
-    }
-    return out;
-  };
+  const activeFilters = toApiFilters;
 
   const clearSelection = () => {
     setSelected(new Set());
@@ -256,7 +266,7 @@ export default function Stores() {
     setSuccess('');
     setExporting(true);
     try {
-      await api.exportStores(filters);
+      await api.exportStores(toApiFilters());
     } catch (err) {
       setError(err.message);
     } finally {
@@ -285,6 +295,18 @@ export default function Stores() {
 
   const columns = ALL_COLUMNS.filter((c) => visibleCols.includes(c.key));
 
+  const regionOptions = [EMPTY_OPT, ...regions.map((r) => ({ value: String(r.id), label: r.name }))];
+  const governateOptions = [EMPTY_OPT, ...options.governates.map((g) => ({ value: g, label: g }))];
+  const categoryOptions = [EMPTY_OPT, ...options.categories.map((c) => ({ value: c, label: c }))];
+  const shopClassOptions = [EMPTY_OPT, ...options.shopClasses.map((c) => ({ value: c, label: c }))];
+  const accountTypeOptions = [EMPTY_OPT, ...options.accountTypes.map((t) => ({ value: t, label: t }))];
+  const statusOptions = [
+    { value: '__empty__', label: 'فعّال' },
+    ...options.statuses.filter(Boolean).map((s) => ({ value: s, label: s })),
+  ];
+  const repOptions = options.reps.map((r) => ({ value: r, label: r }));
+  const visitDayOptions = options.visitDays.map((d) => ({ value: d, label: d }));
+
   const renderFilterCell = (col) => {
     switch (col.key) {
       case 'code':
@@ -301,58 +323,27 @@ export default function Stores() {
         );
       case 'region':
         return (
-          <select value={filters.regionId} onChange={(e) => setFilter('regionId', e.target.value)}>
-            <option value="">الكل</option>
-            {regions.map((r) => (
-              <option key={r.id} value={r.id}>{r.name}</option>
-            ))}
-          </select>
+          <MultiSelect options={regionOptions} value={filters.regionId} onChange={(v) => setFilter('regionId', v)} />
         );
       case 'governate':
         return (
-          <select value={filters.governate} onChange={(e) => setFilter('governate', e.target.value)}>
-            <option value="">الكل</option>
-            {options.governates.map((g) => (
-              <option key={g} value={g}>{g}</option>
-            ))}
-          </select>
+          <MultiSelect options={governateOptions} value={filters.governate} onChange={(v) => setFilter('governate', v)} />
         );
       case 'category':
         return (
-          <select value={filters.category} onChange={(e) => setFilter('category', e.target.value)}>
-            <option value="">الكل</option>
-            {options.categories.map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
+          <MultiSelect options={categoryOptions} value={filters.category} onChange={(v) => setFilter('category', v)} />
         );
       case 'shopClass':
         return (
-          <select value={filters.shopClass} onChange={(e) => setFilter('shopClass', e.target.value)}>
-            <option value="">الكل</option>
-            {options.shopClasses.map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
+          <MultiSelect options={shopClassOptions} value={filters.shopClass} onChange={(v) => setFilter('shopClass', v)} />
         );
       case 'accountType':
         return (
-          <select value={filters.accountType} onChange={(e) => setFilter('accountType', e.target.value)}>
-            <option value="">الكل</option>
-            {options.accountTypes.map((t) => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </select>
+          <MultiSelect options={accountTypeOptions} value={filters.accountType} onChange={(v) => setFilter('accountType', v)} />
         );
       case 'status':
         return (
-          <select value={filters.status} onChange={(e) => setFilter('status', e.target.value)}>
-            <option value="">الكل</option>
-            <option value="active">فعّال</option>
-            {options.statuses.filter((s) => s).map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
+          <MultiSelect options={statusOptions} value={filters.status} onChange={(v) => setFilter('status', v)} />
         );
       case 'mapShow':
         return (
@@ -365,18 +356,8 @@ export default function Stores() {
       case 'visits':
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <select value={filters.repName} onChange={(e) => setFilter('repName', e.target.value)}>
-              <option value="">كل المناديب</option>
-              {options.reps.map((r) => (
-                <option key={r} value={r}>{r}</option>
-              ))}
-            </select>
-            <select value={filters.visitDay} onChange={(e) => setFilter('visitDay', e.target.value)}>
-              <option value="">كل الأيام</option>
-              {options.visitDays.map((d) => (
-                <option key={d} value={d}>{d}</option>
-              ))}
-            </select>
+            <MultiSelect options={repOptions} value={filters.repName} onChange={(v) => setFilter('repName', v)} placeholder="كل المناديب" />
+            <MultiSelect options={visitDayOptions} value={filters.visitDay} onChange={(v) => setFilter('visitDay', v)} placeholder="كل الأيام" />
           </div>
         );
       default:

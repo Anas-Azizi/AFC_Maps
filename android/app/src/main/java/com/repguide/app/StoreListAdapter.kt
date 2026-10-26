@@ -1,6 +1,7 @@
 package com.repguide.app
 
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import com.repguide.app.data.StoreEntity
@@ -30,6 +31,8 @@ class StoreListAdapter(
         val item = items[position]
         holder.binding.storeNameText.text = item.store.name
         holder.binding.storeSubText.text = item.subtitle
+        holder.binding.noLocationBadge.visibility =
+            if (item.store.lat == null || item.store.lng == null) View.VISIBLE else View.GONE
         holder.binding.root.setOnClickListener { onClick(item.store) }
     }
 

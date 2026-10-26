@@ -4,6 +4,7 @@ import com.repguide.app.data.LandmarkEntity
 import com.repguide.app.data.RegionEntity
 import com.repguide.app.data.StoreEntity
 import com.repguide.app.data.VisitEntity
+import com.repguide.app.Permissions
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -23,7 +24,7 @@ object ApiClient {
 
     class NetworkException(message: String) : Exception(message)
 
-    data class LoginResult(val token: String, val userName: String)
+    data class LoginResult(val token: String, val userName: String, val permissions: Permissions)
 
     data class Snapshot(
         val version: Int,
@@ -63,10 +64,24 @@ object ApiClient {
             .build()
         val body = execute(request, unknownError)
         val json = JSONObject(body)
+        val user = json.getJSONObject("user")
         return LoginResult(
             token = json.getString("token"),
-            userName = json.getJSONObject("user").optString("name")
+            userName = user.optString("name"),
+            permissions = Permissions.fromJson(user.optJSONObject("permissions"))
         )
+    }
+
+    /** يجلب صلاحيات المستخدم الحالي — أفضل جهد، يُستدعى عند فتح التطبيق لتحديث النسخة المخزنة */
+    fun fetchMe(serverUrl: String, token: String, unknownError: String): Permissions {
+        val request = Request.Builder()
+            .url("$serverUrl/api/auth/me")
+            .header("Authorization", "Bearer $token")
+            .get()
+            .build()
+        val body = execute(request, unknownError)
+        val user = JSONObject(body).optJSONObject("user") ?: JSONObject(body)
+        return Permissions.fromJson(user.optJSONObject("permissions"))
     }
 
     fun submitStore(

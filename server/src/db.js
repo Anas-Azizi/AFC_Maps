@@ -136,6 +136,14 @@ CREATE TABLE IF NOT EXISTS meta (
 }
 db.exec('CREATE INDEX IF NOT EXISTS idx_stores_code ON stores(code)');
 
+// عمود صلاحيات المستخدمين (JSON) — NULL تعني كل الصلاحيات (الوضع الافتراضي)
+{
+  const ucols = db.prepare('PRAGMA table_info(users)').all();
+  if (ucols.length && !ucols.some((c) => c.name === 'permissions')) {
+    db.exec('ALTER TABLE users ADD COLUMN permissions TEXT');
+  }
+}
+
 export function getDataVersion() {
   const row = db.prepare("SELECT value FROM meta WHERE key = 'data_version'").get();
   return row ? Number(row.value) : 0;

@@ -6,6 +6,7 @@ import { authRequired, adminRequired, hashPassword } from '../auth.js';
 import { parseDistrictsKmz } from '../kmz.js';
 import { parseCustomersXlsx, parseRoutesXlsx } from '../xlsx.js';
 import { assignRegions } from '../importer.js';
+import { resolvePermissions } from '../permissions.js';
 
 export const adminRouter = Router();
 adminRouter.use(authRequired, adminRequired);
@@ -13,18 +14,20 @@ adminRouter.use(authRequired, adminRequired);
 // ---------- المستخدمون ----------
 
 adminRouter.get('/users', (req, res) => {
-  const users = db.prepare('SELECT id, name, username, role, active, created_at AS createdAt FROM users ORDER BY name').all();
+  const users = db.prepare('SELECT id, name, username, role, active, permissions, created_at AS createdAt FROM users ORDER BY name')
+    .all()
+    .map((u) => ({ ...u, permissions: resolvePermissions(u.permissions) }));
   res.json(users);
 });
 
 adminRouter.post('/users', (req, res) => {
-  const { name, username, password, role = 'rep' } = req.body || {};
+  const { name, username, password, role = 'rep', permissions } = req.body || {};
   if (!name || !username || !password) return res.status(400).json({ error: 'الاسم واسم المستخدم وكلمة المرور مطلوبة' });
   if (!['admin', 'rep'].includes(role)) return res.status(400).json({ error: 'دور غير صالح' });
   try {
     const info = db
-      .prepare('INSERT INTO users (name, username, password_hash, role) VALUES (?, ?, ?, ?)')
-      .run(name, username, hashPassword(password), role);
+      .prepare('INSERT INTO users (name, username, password_hash, role, permissions) VALUES (?, ?, ?, ?, ?)')
+      .run(name, username, hashPassword(password), role, permissions ? JSON.stringify(permissions) : null);
     res.status(201).json({ id: info.lastInsertRowid });
   } catch (e) {
     res.status(409).json({ error: 'اسم المستخدم مستخدم مسبقاً' });
@@ -33,14 +36,15 @@ adminRouter.post('/users', (req, res) => {
 
 adminRouter.put('/users/:id', (req, res) => {
   const id = Number(req.params.id);
-  const { name, role, active } = req.body || {};
+  const { name, role, active, permissions } = req.body || {};
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
   if (!user) return res.status(404).json({ error: 'المستخدم غير موجود' });
   if (role && !['admin', 'rep'].includes(role)) return res.status(400).json({ error: 'دور غير صالح' });
-  db.prepare('UPDATE users SET name = ?, role = ?, active = ? WHERE id = ?').run(
+  db.prepare('UPDATE users SET name = ?, role = ?, active = ?, permissions = ? WHERE id = ?').run(
     name ?? user.name,
     role ?? user.role,
     active == null ? user.active : active ? 1 : 0,
+    permissions !== undefined ? (permissions ? JSON.stringify(permissions) : null) : user.permissions,
     id
   );
   res.json({ ok: true });
@@ -124,7 +128,21 @@ function buildStoreFilters(query, a = 'stores.') {
   const where = [];
   const params = [];
   const like = (col, val) => { where.push(`${col} LIKE ?`); params.push(`%${val}%`); };
-  const eq = (col, val) => { where.push(`${col} = ?`); params.push(val); };
+
+  // قيم متعددة مفصولة بفواصل؛ '__empty__' تعني الحقل الفارغ
+  const multi = (col, raw, numeric = false) => {
+    const vals = String(raw).split(',').filter((v) => v !== '');
+    if (!vals.length) return;
+    const hasEmpty = vals.includes('__empty__');
+    const rest = vals.filter((v) => v !== '__empty__');
+    const parts = [];
+    if (rest.length) {
+      parts.push(`${col} IN (${rest.map(() => '?').join(',')})`);
+      params.push(...rest.map((v) => (numeric ? Number(v) : v)));
+    }
+    if (hasEmpty) parts.push(`(${col} IS NULL OR ${col} = '')`);
+    if (parts.length) where.push('(' + parts.join(' OR ') + ')');
+  };
 
   if (query.q) { where.push(`(${a}name LIKE ? OR CAST(${a}code AS TEXT) LIKE ?)`); params.push(`%${query.q}%`, `%${query.q}%`); }
   if (query.code) like(`CAST(${a}code AS TEXT)`, query.code);
@@ -132,20 +150,27 @@ function buildStoreFilters(query, a = 'stores.') {
   if (query.address) like(`${a}address`, query.address);
   if (query.managerName) like(`${a}manager_name`, query.managerName);
   if (query.phone) { where.push(`(${a}phone LIKE ? OR ${a}whatsapp LIKE ?)`); params.push(`%${query.phone}%`, `%${query.phone}%`); }
-  if (query.regionId) eq(`${a}region_id`, Number(query.regionId));
-  if (query.governate) eq(`${a}governate`, query.governate);
-  if (query.category) eq(`${a}category`, query.category);
-  if (query.shopClass) eq(`${a}shop_class`, query.shopClass);
-  if (query.accountType) eq(`${a}account_type`, query.accountType);
+  if (query.regionId) multi(`${a}region_id`, query.regionId, true);
+  if (query.governate) multi(`${a}governate`, query.governate);
+  if (query.category) multi(`${a}category`, query.category);
+  if (query.shopClass) multi(`${a}shop_class`, query.shopClass);
+  if (query.accountType) multi(`${a}account_type`, query.accountType);
   if (query.status === 'active') where.push(`(${a}status IS NULL OR ${a}status = '')`);
-  else if (query.status) eq(`${a}status`, query.status);
-  if (query.mapShow === '1' || query.mapShow === '0') eq(`${a}map_show`, Number(query.mapShow));
+  else if (query.status) multi(`${a}status`, query.status);
+  if (query.mapShow === '1' || query.mapShow === '0') where.push(`${a}map_show = ${query.mapShow === '1' ? 1 : 0}`);
   if (query.hasCoords === '1') where.push(`${a}lat IS NOT NULL AND ${a}lng IS NOT NULL`);
   if (query.hasCoords === '0') where.push(`(${a}lat IS NULL OR ${a}lng IS NULL)`);
   if (query.hasVisits === '1') where.push(`EXISTS (SELECT 1 FROM visits v WHERE v.store_id = ${a}id)`);
   if (query.hasVisits === '0') where.push(`NOT EXISTS (SELECT 1 FROM visits v WHERE v.store_id = ${a}id)`);
-  if (query.repName) { where.push(`EXISTS (SELECT 1 FROM visits v WHERE v.store_id = ${a}id AND v.rep_name = ?)`); params.push(query.repName); }
-  if (query.visitDay) { where.push(`EXISTS (SELECT 1 FROM visits v WHERE v.store_id = ${a}id AND v.visit_day = ?)`); params.push(query.visitDay); }
+
+  const multiVisit = (col, raw) => {
+    const vals = String(raw).split(',').filter(Boolean);
+    if (!vals.length) return;
+    where.push(`EXISTS (SELECT 1 FROM visits v WHERE v.store_id = ${a}id AND ${col} IN (${vals.map(() => '?').join(',')}))`);
+    params.push(...vals);
+  };
+  if (query.repName) multiVisit('v.rep_name', query.repName);
+  if (query.visitDay) multiVisit('v.visit_day', query.visitDay);
 
   return { whereSql: where.length ? ' WHERE ' + where.join(' AND ') : '', params };
 }

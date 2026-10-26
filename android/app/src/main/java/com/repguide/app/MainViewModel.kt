@@ -30,7 +30,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val stores: List<StoreEntity> = emptyList(),
         val landmarks: List<LandmarkEntity> = emptyList(),
         val syncing: Boolean = false,
-        val event: Event? = null
+        val event: Event? = null,
+        /** null = كل المحلات؛ غير ذلك فقط المحلات التي زارها أحد المناديب المسموحين */
+        val visibleStoreIds: Set<Int>? = null,
+        val repNames: List<String> = emptyList(),
+        val repFilter: String? = null
     )
 
     private val dao = AppDatabase.get(app).dataDao()
@@ -44,7 +48,60 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 Triple(dao.allRegions(), dao.allStores(), dao.allLandmarks())
             }
             _state.update { it.copy(regions = regions, stores = stores, landmarks = landmarks) }
+            refreshVisibility()
             if (syncIfEmpty && stores.isEmpty()) sync()
+        }
+    }
+
+    /**
+     * المناديب الفعّالون: فلتر المستخدم إن وُجد، وإلا تقييد الصلاحيات.
+     * يعيد null عندما لا يوجد أي تقييد (كل المحلات مرئية).
+     */
+    private fun effectiveReps(ctx: Application): List<String>? {
+        Prefs.repFilter(ctx)?.let { return listOf(it) }
+        return Prefs.permissions(ctx).reps?.takeIf { it.isNotEmpty() }
+    }
+
+    /** يعيد حساب المحلات المرئية وقائمة المناديب من قاعدة البيانات */
+    fun refreshVisibility() {
+        val ctx = getApplication<Application>()
+        viewModelScope.launch {
+            val reps = effectiveReps(ctx)
+            val (ids, names) = withContext(Dispatchers.IO) {
+                val ids = reps?.let { dao.storeIdsForReps(it).toSet() }
+                ids to dao.allRepNames()
+            }
+            _state.update {
+                it.copy(
+                    visibleStoreIds = ids,
+                    repNames = names,
+                    repFilter = Prefs.repFilter(ctx)
+                )
+            }
+        }
+    }
+
+    /** اختيار مندوب للفلترة — null («الكل») يمسح الفلتر */
+    fun setRepFilter(rep: String?) {
+        val ctx = getApplication<Application>()
+        Prefs.setRepFilter(ctx, rep)
+        refreshVisibility()
+    }
+
+    /** تحديث الصلاحيات من /api/auth/me عند فتح التطبيق — أفضل جهد، ويبقى المخزن عند غياب الاتصال */
+    fun refreshPermissions() {
+        val ctx = getApplication<Application>()
+        val token = Prefs.token(ctx) ?: return
+        viewModelScope.launch {
+            try {
+                val permissions = withContext(Dispatchers.IO) {
+                    ApiClient.fetchMe(Prefs.serverUrl(ctx), token, ctx.getString(R.string.error_unknown))
+                }
+                Prefs.setPermissions(ctx, permissions)
+                refreshVisibility()
+            } catch (e: Exception) {
+                // دون اتصال أو خطأ — نبقي الصلاحيات المخزنة
+            }
         }
     }
 
@@ -77,6 +134,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         )
                     )
                 }
+                refreshVisibility()
             } catch (e: ApiClient.ApiException) {
                 if (e.status == 401) {
                     _state.update { it.copy(event = Event.Unauthorized) }

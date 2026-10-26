@@ -283,6 +283,79 @@ input:focus, select:focus, textarea:focus {
 
 .modal-box h2 { margin: 0 0 16px; }
 
+.multi-select { position: relative; min-width: 130px; }
+
+.multi-select-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: right;
+}
+
+.multi-select-active { border-color: #2563eb; color: #1d4ed8; }
+
+.multi-select-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.multi-select-arrow { font-size: 10px; color: #777; flex-shrink: 0; }
+
+.multi-select-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  inset-inline-start: 0;
+  z-index: 40;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 180px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.multi-select-panel label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.multi-select-panel input { width: auto; }
+
+.perms-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 6px 16px;
+}
+
+.perms-grid label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.perms-grid input { width: auto; }
+
 .badge {
   display: inline-block;
   padding: 2px 10px;

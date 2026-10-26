@@ -85,4 +85,12 @@
     <string name="visits_title">زيارات المندوبين</string>
     <string name="no_visits">لا توجد زيارات مسجلة</string>
     <string name="invoice_type">نوع الفاتورة</string>
+    <string name="store_name_with_code">%1$s (الكود: %2$d)</string>
+    <string name="no_location_badge">بلا موقع</string>
+    <string name="store_no_location_banner">هذا الزبون ليس له موقع</string>
+    <string name="set_location">تحديد الموقع</string>
+    <string name="hide_pins">إخفاء الدبابيس</string>
+    <string name="show_pins">إظهار الدبابيس</string>
+    <string name="rep_filter">فلتر المندوب</string>
+    <string name="all_reps">الكل</string>
 </resources>

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { db } from './db.js';
 import { verifyPassword, signToken, authRequired } from './auth.js';
+import { resolvePermissions } from './permissions.js';
 import { dataRouter } from './routes/data.js';
 import { adminRouter } from './routes/admin.js';
 import { tilesRouter } from './routes/tiles.js';
@@ -21,11 +22,11 @@ app.post('/api/auth/login', (req, res) => {
   if (!user || !user.active || !verifyPassword(password, user.password_hash)) {
     return res.status(401).json({ error: 'بيانات الدخول غير صحيحة' });
   }
-  res.json({ token: signToken(user), user: { id: user.id, name: user.name, role: user.role } });
+  res.json({ token: signToken(user), user: { id: user.id, name: user.name, role: user.role, permissions: resolvePermissions(user.permissions) } });
 });
 
 app.get('/api/auth/me', authRequired, (req, res) => {
-  res.json({ id: req.user.id, name: req.user.name, role: req.user.role });
+  res.json({ id: req.user.id, name: req.user.name, role: req.user.role, permissions: resolvePermissions(req.user.permissions) });
 });
 
 app.use('/api/data', dataRouter);

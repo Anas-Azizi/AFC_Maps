@@ -36,7 +36,7 @@ export function authRequired(req, res, next) {
   if (!token) return res.status(401).json({ error: 'مطلوب تسجيل الدخول' });
   try {
     const payload = jwt.verify(token, getJwtSecret());
-    const user = db.prepare('SELECT id, name, username, role, active FROM users WHERE id = ?').get(payload.sub);
+    const user = db.prepare('SELECT id, name, username, role, active, permissions FROM users WHERE id = ?').get(payload.sub);
     if (!user || !user.active) return res.status(401).json({ error: 'الحساب غير فعّال' });
     req.user = user;
     next();

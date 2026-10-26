@@ -35,6 +35,13 @@ interface DataDao {
     @Query("SELECT * FROM visits WHERE storeId = :storeId")
     suspend fun visitsForStore(storeId: Int): List<VisitEntity>
 
+    /** معرفات المحلات التي لها زيارة واحدة على الأقل من أحد المناديب المعطاة */
+    @Query("SELECT DISTINCT storeId FROM visits WHERE repName IN (:reps)")
+    suspend fun storeIdsForReps(reps: List<String>): List<Int>
+
+    @Query("SELECT DISTINCT repName FROM visits WHERE repName IS NOT NULL AND repName != '' ORDER BY repName")
+    suspend fun allRepNames(): List<String>
+
     @Query("DELETE FROM stores")
     suspend fun clearStores()
 

@@ -19,6 +19,31 @@
             android:textStyle="bold" />
 
         <LinearLayout
+            android:id="@+id/noLocationBanner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="#FFF3CD"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="12dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/store_no_location_banner"
+                android:textColor="#7A5C00" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/setLocationButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/set_location" />
+        </LinearLayout>
+
+        <LinearLayout
             android:id="@+id/rowOwner"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
