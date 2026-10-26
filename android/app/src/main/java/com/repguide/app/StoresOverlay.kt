@@ -30,18 +30,35 @@ class StoresOverlay(
     /** معرف المحل المختار حالياً — يُرسم حول دبوسه حلقة مميزة */
     var highlightedId: Int? = null
 
-    /** الحد الأدنى لمستوى التكبير لإظهار النصوص (الدبابيس تظهر دائماً) */
-    var minLabelZoom = 13.5
+    /** الحد الأدنى لمستوى التكبير لإظهار الدبابيس الكاملة مع النصوص */
+    var minLabelZoom = 14.0
+
+    /** تحت هذا المستوى تُرسم نقاط صغيرة بدل الدبابيس */
+    var dotZoom = 12.0
 
     private val density = mapView.context.resources.displayMetrics.density
+    private val appContext = mapView.context
     private val pinSize = (30 * density).toInt()
-    private val pin: Bitmap = run {
-        val drawable = ContextCompat.getDrawable(mapView.context, R.drawable.ic_pin)!!
-        val bmp = Bitmap.createBitmap(pinSize, pinSize, Bitmap.Config.ARGB_8888)
+    private val pinSmallSize = (16 * density).toInt()
+    private fun pinBitmap(size: Int): Bitmap {
+        val drawable = ContextCompat.getDrawable(appContext, R.drawable.ic_pin)!!
+        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
-        drawable.setBounds(0, 0, pinSize, pinSize)
+        drawable.setBounds(0, 0, size, size)
         drawable.draw(c)
-        bmp
+        return bmp
+    }
+    private val pin: Bitmap = pinBitmap(pinSize)
+    private val pinSmall: Bitmap = pinBitmap(pinSmallSize)
+
+    private val dotFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#D81B60")
+        style = Paint.Style.FILL
+    }
+    private val dotStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        style = Paint.Style.STROKE
+        strokeWidth = 1.5f * density
     }
 
     private val namePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -88,7 +105,11 @@ class StoresOverlay(
         val clip = canvas.clipBounds
         val margin = (160 * density).toInt()
         clip.inset(-margin, -margin)
-        val showLabels = pj.zoomLevel >= minLabelZoom
+        val zoom = pj.zoomLevel
+        val showLabels = zoom >= minLabelZoom
+        val dotMode = zoom < dotZoom
+        val smallMode = !dotMode && !showLabels
+        val dotRadius = 4f * density
         val lineH = namePaint.fontSpacing
         val padH = 6 * density
         val padV = 3 * density
@@ -99,12 +120,24 @@ class StoresOverlay(
             pj.toPixels(GeoPoint(lat, lng), tmpPoint)
             if (!clip.contains(tmpPoint.x, tmpPoint.y)) continue
 
-            canvas.drawBitmap(
-                pin,
-                tmpPoint.x - pinSize / 2f,
-                tmpPoint.y - pinSize.toFloat(),
-                null
-            )
+            when {
+                dotMode -> {
+                    canvas.drawCircle(tmpPoint.x.toFloat(), tmpPoint.y.toFloat(), dotRadius, dotFillPaint)
+                    canvas.drawCircle(tmpPoint.x.toFloat(), tmpPoint.y.toFloat(), dotRadius, dotStrokePaint)
+                }
+                smallMode -> canvas.drawBitmap(
+                    pinSmall,
+                    tmpPoint.x - pinSmallSize / 2f,
+                    tmpPoint.y - pinSmallSize.toFloat(),
+                    null
+                )
+                else -> canvas.drawBitmap(
+                    pin,
+                    tmpPoint.x - pinSize / 2f,
+                    tmpPoint.y - pinSize.toFloat(),
+                    null
+                )
+            }
             if (store.id == highlightedId) {
                 canvas.drawCircle(
                     tmpPoint.x.toFloat(),
@@ -140,7 +173,19 @@ class StoresOverlay(
 
     override fun onSingleTapConfirmed(e: MotionEvent, mapView: MapView): Boolean {
         val pj = mapView.projection
-        val hitRadius = 30.0 * density
+        val zoom = pj.zoomLevel
+        val dotMode = zoom < dotZoom
+        val smallMode = !dotMode && zoom < minLabelZoom
+        val hitRadius = when {
+            dotMode -> 14.0 * density
+            smallMode -> 20.0 * density
+            else -> 30.0 * density
+        }
+        val yOffset = when {
+            dotMode -> 0f
+            smallMode -> pinSmallSize / 2f
+            else -> pinSize / 2f
+        }
         var best: StoreEntity? = null
         var bestDist = Double.MAX_VALUE
         for (store in stores) {
@@ -150,7 +195,7 @@ class StoresOverlay(
             // مركز الضربة: منتصف الدبوس
             val d = hypot(
                 (e.x - tmpPoint.x).toDouble(),
-                (e.y - (tmpPoint.y - pinSize / 2f)).toDouble()
+                (e.y - (tmpPoint.y - yOffset)).toDouble()
             )
             if (d < hitRadius && d < bestDist) {
                 bestDist = d
