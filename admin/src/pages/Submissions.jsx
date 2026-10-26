@@ -100,6 +100,7 @@ export default function Submissions() {
             <thead>
               <tr>
                 <th>اسم المحل</th>
+                <th>الكود</th>
                 <th>الموقع الجديد</th>
                 <th>الملاحظة</th>
                 <th>المستخدم</th>
@@ -111,6 +112,7 @@ export default function Submissions() {
               {rows.map((r) => (
                 <tr key={r.id}>
                   <td>{r.storeName}</td>
+                  <td dir="ltr">{r.storeCode ?? '—'}</td>
                   <td dir="ltr">
                     {r.newLat != null ? `${Number(r.newLat).toFixed(6)}, ${Number(r.newLng).toFixed(6)}` : '—'}
                   </td>
@@ -126,7 +128,7 @@ export default function Submissions() {
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan="6" className="muted">
+                  <td colSpan="7" className="muted">
                     {showArchived ? 'لا توجد سجلات مؤرشفة' : 'لا توجد تحديثات بعد'}
                   </td>
                 </tr>
