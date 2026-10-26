@@ -54,18 +54,30 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * المناديب الفعّالون: فلتر المستخدم إن وُجد، وإلا تقييد الصلاحيات.
-     * يعيد null عندما لا يوجد أي تقييد (كل المحلات مرئية).
+     * المناديب الفعّالون: تقييد الصلاحيات حدّ أقصى دائماً، وفلتر المستخدم
+     * يضيّق ضمنه فقط. يعيد null عندما لا يوجد أي تقييد (كل المحلات مرئية).
      */
     private fun effectiveReps(ctx: Application): List<String>? {
-        Prefs.repFilter(ctx)?.let { return listOf(it) }
-        return Prefs.permissions(ctx).reps?.takeIf { it.isNotEmpty() }
+        val allowed = Prefs.permissions(ctx).reps?.takeIf { it.isNotEmpty() }
+        val filter = Prefs.repFilter(ctx)
+        return when {
+            allowed != null && filter != null && allowed.contains(filter) -> listOf(filter)
+            allowed != null -> allowed
+            filter != null -> listOf(filter)
+            else -> null
+        }
     }
 
     /** يعيد حساب المحلات المرئية وقائمة المناديب من قاعدة البيانات */
     fun refreshVisibility() {
         val ctx = getApplication<Application>()
         viewModelScope.launch {
+            // مسح فلتر مندوب لم يعد ضمن المندوبين المسموحين
+            val allowed = Prefs.permissions(ctx).reps?.takeIf { it.isNotEmpty() }
+            val currentFilter = Prefs.repFilter(ctx)
+            if (allowed != null && currentFilter != null && !allowed.contains(currentFilter)) {
+                Prefs.setRepFilter(ctx, null)
+            }
             val reps = effectiveReps(ctx)
             val (ids, names) = withContext(Dispatchers.IO) {
                 val ids = reps?.let { dao.storeIdsForReps(it).toSet() }

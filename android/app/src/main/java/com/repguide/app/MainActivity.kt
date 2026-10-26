@@ -522,13 +522,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showRepFilterDialog() {
-        val options = listOf(getString(R.string.all_reps)) + repNames
+        // عند وجود تقييد رؤية بمندوبين، لا تُعرض إلا أسماؤهم
+        val allowed = Prefs.permissions(this).reps?.takeIf { it.isNotEmpty() }
+        val shown = allowed?.let { a -> repNames.filter { a.contains(it) }.ifEmpty { a } } ?: repNames
+        val options = listOf(getString(R.string.all_reps)) + shown
         val current = repFilter
-        val checked = current?.let { repNames.indexOf(it) + 1 } ?: 0
+        val checked = current?.let { shown.indexOf(it) + 1 }?.takeIf { it > 0 } ?: 0
         AlertDialog.Builder(this)
             .setTitle(R.string.rep_filter)
             .setSingleChoiceItems(options.toTypedArray(), checked) { dialog, which ->
-                vm.setRepFilter(if (which <= 0) null else repNames.getOrNull(which - 1))
+                vm.setRepFilter(if (which <= 0) null else shown.getOrNull(which - 1))
                 dialog.dismiss()
             }
             .setNegativeButton(R.string.cancel, null)
