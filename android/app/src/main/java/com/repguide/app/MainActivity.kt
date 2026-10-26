@@ -126,7 +126,7 @@ class MainActivity : AppCompatActivity() {
         // أقصى تكبير مفيد: OSM تقدم بلاطات حقيقية حتى z19، ومن z20 إلى z22 يعرض التطبيق تقريباً مكبّراً من أدنى مستوى متوفر
         binding.map.minZoomLevel = 10.0
         binding.map.maxZoomLevel = 22.0
-        binding.map.controller.setZoom(15.0)
+        binding.map.controller.setZoom(20.0)
         binding.map.controller.setCenter(ALEPPO)
         setupTileProvider()
         storeOverlay = StoresOverlay(binding.map) { store ->
