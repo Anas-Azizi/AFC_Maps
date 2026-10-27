@@ -174,6 +174,17 @@ export default function Stores() {
     setAllFiltered(false);
   };
 
+  const hasActiveFilters = Object.entries(filters).some(([, v]) =>
+    Array.isArray(v) ? v.length > 0 : v !== ''
+  );
+
+  const clearFilters = () => {
+    setFilters({ ...EMPTY_FILTERS });
+    setTextValues(Object.fromEntries(TEXT_KEYS.map((k) => [k, ''])));
+    setPage(1);
+    setSearchParams({}, { replace: true });
+  };
+
   const toggleRow = (id) => {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -531,6 +542,15 @@ export default function Stores() {
             disabled={exporting}
           >
             {exporting ? 'جارٍ التصدير…' : 'تصدير Excel'}
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={clearFilters}
+            disabled={!hasActiveFilters}
+            title="إلغاء جميع الفلاتر"
+          >
+            مسح الفلاتر
           </button>
           <Link to="/stores/new" className="btn btn-primary">إضافة زبون جديد</Link>
         </div>
