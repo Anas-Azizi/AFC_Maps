@@ -35,16 +35,19 @@ dataRouter.post('/submissions', authRequired, (req, res) => {
   res.status(201).json({ id: info.lastInsertRowid });
 });
 
-// تحديث مقترح على محل موجود (موقع جديد و/أو ملاحظة) من المندوب
+// تحديث مقترح على محل موجود (موقع جديد و/أو ملاحظة و/أو اسم مقترح و/أو إلغاء نهائي) من المندوب
 dataRouter.post('/updates', authRequired, (req, res) => {
-  const { storeId, storeName, lat, lng, note } = req.body || {};
+  const { storeId, storeName, lat, lng, note, newName, cancel } = req.body || {};
   const hasLocation = typeof lat === 'number' && typeof lng === 'number';
   const hasNote = typeof note === 'string' && note.trim().length > 0;
-  if (!storeName || (!hasLocation && !hasNote)) {
-    return res.status(400).json({ error: 'اسم المحل مع موقع جديد أو ملاحظة مطلوبة' });
+  const hasNewName = typeof newName === 'string' && newName.trim().length > 0;
+  const hasCancel = cancel === true;
+  if (!storeName || (!hasLocation && !hasNote && !hasNewName && !hasCancel)) {
+    return res.status(400).json({ error: 'اسم المحل مع موقع جديد أو ملاحظة أو اسم مقترح أو إلغاء مطلوبة' });
   }
   const info = db
-    .prepare('INSERT INTO store_updates (store_id, store_name, new_lat, new_lng, note, user_id) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(storeId ?? null, storeName.trim(), hasLocation ? lat : null, hasLocation ? lng : null, hasNote ? note.trim() : null, req.user.id);
+    .prepare('INSERT INTO store_updates (store_id, store_name, new_lat, new_lng, note, new_name, cancel, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(storeId ?? null, storeName.trim(), hasLocation ? lat : null, hasLocation ? lng : null,
+      hasNote ? note.trim() : null, hasNewName ? newName.trim() : null, hasCancel ? 1 : 0, req.user.id);
   res.status(201).json({ id: info.lastInsertRowid });
 });

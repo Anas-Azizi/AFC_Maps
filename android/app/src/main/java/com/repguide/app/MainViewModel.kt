@@ -31,10 +31,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val landmarks: List<LandmarkEntity> = emptyList(),
         val syncing: Boolean = false,
         val event: Event? = null,
-        /** null = كل المحلات؛ غير ذلك فقط المحلات التي زارها أحد المناديب المسموحين */
+        /** null = كل المحلات؛ غير ذلك فقط المحلات المطابقة لفلتر المسارات */
         val visibleStoreIds: Set<Int>? = null,
         val repNames: List<String> = emptyList(),
-        val repFilter: String? = null
+        val visitDays: List<String> = emptyList(),
+        /** فلتر المندوبين المختار — null = بلا فلترة */
+        val repFilter: List<String>? = null,
+        /** فلتر أيام الزيارة المختار — null = بلا فلترة */
+        val dayFilter: List<String>? = null
     )
 
     private val dao = AppDatabase.get(app).dataDao()

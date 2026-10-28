@@ -144,6 +144,17 @@ db.exec('CREATE INDEX IF NOT EXISTS idx_stores_code ON stores(code)');
   }
 }
 
+// أعمدة «الاسم المقترح» و«إلغاء نهائي» في تحديثات المحلات
+{
+  const scols = db.prepare('PRAGMA table_info(store_updates)').all();
+  if (scols.length && !scols.some((c) => c.name === 'new_name')) {
+    db.exec('ALTER TABLE store_updates ADD COLUMN new_name TEXT');
+  }
+  if (scols.length && !scols.some((c) => c.name === 'cancel')) {
+    db.exec('ALTER TABLE store_updates ADD COLUMN cancel INTEGER NOT NULL DEFAULT 0');
+  }
+}
+
 export function getDataVersion() {
   const row = db.prepare("SELECT value FROM meta WHERE key = 'data_version'").get();
   return row ? Number(row.value) : 0;

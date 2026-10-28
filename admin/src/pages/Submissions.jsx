@@ -101,7 +101,10 @@ export default function Submissions() {
               <tr>
                 <th>اسم المحل</th>
                 <th>الكود</th>
-                <th>الموقع الجديد</th>
+                <th>النوع</th>
+                <th>الاسم المقترح</th>
+                <th>Latitude</th>
+                <th>Longitude</th>
                 <th>الملاحظة</th>
                 <th>المستخدم</th>
                 <th>التاريخ</th>
@@ -113,9 +116,16 @@ export default function Submissions() {
                 <tr key={r.id}>
                   <td>{r.storeName}</td>
                   <td dir="ltr">{r.storeCode ?? '—'}</td>
-                  <td dir="ltr">
-                    {r.newLat != null ? `${Number(r.newLat).toFixed(6)}, ${Number(r.newLng).toFixed(6)}` : '—'}
+                  <td>
+                    {r.cancel ? (
+                      <span className="badge badge-red">إلغاء نهائي</span>
+                    ) : (
+                      <span className="muted">تحديث</span>
+                    )}
                   </td>
+                  <td>{r.newName || '—'}</td>
+                  <td dir="ltr">{r.newLat != null ? Number(r.newLat).toFixed(6) : '—'}</td>
+                  <td dir="ltr">{r.newLng != null ? Number(r.newLng).toFixed(6) : '—'}</td>
                   <td>{r.note || '—'}</td>
                   <td>{r.userName}</td>
                   <td dir="ltr">{r.createdAt}</td>
@@ -128,7 +138,7 @@ export default function Submissions() {
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan="7" className="muted">
+                  <td colSpan="10" className="muted">
                     {showArchived ? 'لا توجد سجلات مؤرشفة' : 'لا توجد تحديثات بعد'}
                   </td>
                 </tr>

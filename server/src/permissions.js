@@ -18,6 +18,7 @@ export const DEFAULT_PERMISSIONS = {
   canShareLocation: true,
   canUpdateLocation: true,
   canUpdateBoth: true,
+  canRename: true,
   canAddStore: true,
   showServerAddress: true,
   canDownloadMaps: true,

@@ -22,6 +22,7 @@ data class Permissions(
     val canShareLocation: Boolean = true,
     val canUpdateLocation: Boolean = true,
     val canUpdateBoth: Boolean = true,
+    val canRename: Boolean = true,
     val canAddStore: Boolean = true,
     val showServerAddress: Boolean = true,
     val canDownloadMaps: Boolean = true
@@ -46,6 +47,7 @@ data class Permissions(
         json.put("canShareLocation", canShareLocation)
         json.put("canUpdateLocation", canUpdateLocation)
         json.put("canUpdateBoth", canUpdateBoth)
+        json.put("canRename", canRename)
         json.put("canAddStore", canAddStore)
         json.put("showServerAddress", showServerAddress)
         json.put("canDownloadMaps", canDownloadMaps)
@@ -74,6 +76,7 @@ data class Permissions(
                 canShareLocation = json.optBoolean("canShareLocation", true),
                 canUpdateLocation = json.optBoolean("canUpdateLocation", true),
                 canUpdateBoth = json.optBoolean("canUpdateBoth", true),
+                canRename = json.optBoolean("canRename", true),
                 canAddStore = json.optBoolean("canAddStore", true),
                 showServerAddress = json.optBoolean("showServerAddress", true),
                 canDownloadMaps = json.optBoolean("canDownloadMaps", true)

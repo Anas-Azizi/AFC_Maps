@@ -68,5 +68,7 @@ data class PendingUpdateEntity(
     val lat: Double?,
     val lng: Double?,
     val note: String?,
+    val newName: String? = null,
+    val cancel: Boolean = false,
     val createdAt: Long
 )

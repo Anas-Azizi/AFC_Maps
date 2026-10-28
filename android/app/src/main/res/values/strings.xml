@@ -56,7 +56,15 @@
     <string name="new_store_queued">لا يوجد اتصال — حُفظ المحل محلياً وسيُرسل تلقائياً عند توفر الاتصال</string>
     <string name="update_location">تحديث موقع الزبون</string>
     <string name="add_note">إضافة ملاحظة</string>
-    <string name="update_location_with_note">تحديث الموقع مع ملاحظة</string>
+    <string name="cancel_store">الغاء نهائي</string>
+    <string name="confirm_cancel_store">هل تريد إلغاء هذا الزبون نهائياً؟</string>
+    <string name="rename_store">تعديل الاسم</string>
+    <string name="rename_store_title">تعديل اسم «%1$s»</string>
+    <string name="rename_store_unchanged">الاسم لم يتغير</string>
+    <string name="confirm">تأكيد</string>
+    <string name="back">رجوع</string>
+    <string name="confirm_location_title">تأكيد الموقع</string>
+    <string name="gps_accuracy">الدقة: ~%1$dم</string>
     <string name="confirm_update_location">سيتم إرسال موقعك الحالي (%2$.5f، %3$.5f) كموقع مُقترح للمحل «%1$s»</string>
     <string name="note_dialog_title">ملاحظة عن «%1$s»</string>
     <string name="note_hint">اكتب الملاحظة…</string>
@@ -91,6 +99,10 @@
     <string name="set_location">تحديد الموقع</string>
     <string name="hide_pins">إخفاء الدبابيس</string>
     <string name="show_pins">إظهار الدبابيس</string>
-    <string name="rep_filter">فلتر المندوب</string>
-    <string name="all_reps">الكل</string>
+    <string name="route_filter">فلتر المسارات</string>
+    <string name="route_filter_reps">المندوبون</string>
+    <string name="route_filter_days">الأيام</string>
+    <string name="apply">تطبيق</string>
+    <string name="clear">مسح</string>
+    <string name="region_stores_reopen">محلات المنطقة (%1$d)</string>
 </resources>

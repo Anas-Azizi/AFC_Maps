@@ -114,7 +114,9 @@ object ApiClient {
         lat: Double?,
         lng: Double?,
         note: String?,
-        unknownError: String
+        unknownError: String,
+        newName: String? = null,
+        cancel: Boolean = false
     ) {
         val payload = JSONObject()
             .put("storeName", storeName)
@@ -122,6 +124,8 @@ object ApiClient {
         lat?.let { payload.put("lat", it) }
         lng?.let { payload.put("lng", it) }
         note?.let { payload.put("note", it) }
+        newName?.let { payload.put("newName", it) }
+        if (cancel) payload.put("cancel", true)
         val request = Request.Builder()
             .url("$serverUrl/api/data/updates")
             .header("Authorization", "Bearer $token")

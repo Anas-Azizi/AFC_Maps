@@ -463,7 +463,9 @@ adminRouter.get('/updates', (req, res) => {
   const rows = db
     .prepare(`SELECT s.id, s.store_id AS storeId, s.store_name AS storeName,
               st.code AS storeCode,
-              s.new_lat AS newLat, s.new_lng AS newLng, s.note, s.created_at AS createdAt,
+              s.new_lat AS newLat, s.new_lng AS newLng, s.note,
+              s.new_name AS newName, s.cancel,
+              s.created_at AS createdAt,
               u.name AS userName
               FROM store_updates s JOIN users u ON u.id = s.user_id
               LEFT JOIN stores st ON st.id = s.store_id

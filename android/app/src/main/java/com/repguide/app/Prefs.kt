@@ -10,7 +10,8 @@ object Prefs {
     private const val KEY_DATA_VERSION = "data_version"
     private const val KEY_PERMISSIONS = "permissions"
     private const val KEY_PINS_HIDDEN = "pins_hidden"
-    private const val KEY_REP_FILTER = "rep_filter"
+    private const val KEY_REP_FILTER_MULTI = "rep_filter_multi"
+    private const val KEY_DAY_FILTER = "day_filter"
 
     private fun sp(ctx: Context) = ctx.getSharedPreferences(NAME, Context.MODE_PRIVATE)
 
@@ -27,7 +28,8 @@ object Prefs {
             .remove(KEY_TOKEN)
             .remove(KEY_USER_NAME)
             .remove(KEY_PERMISSIONS)
-            .remove(KEY_REP_FILTER)
+            .remove(KEY_REP_FILTER_MULTI)
+            .remove(KEY_DAY_FILTER)
             .apply()
     }
 
@@ -47,11 +49,32 @@ object Prefs {
         sp(ctx).edit().putBoolean(KEY_PINS_HIDDEN, hidden).apply()
     }
 
-    fun repFilter(ctx: Context): String? = sp(ctx).getString(KEY_REP_FILTER, null)
+    /** قائمة مندوبي فلتر المسارات (JSON) — null عند غياب الفلتر */
+    fun repFilterMulti(ctx: Context): List<String>? = stringListPref(ctx, KEY_REP_FILTER_MULTI)
 
-    fun setRepFilter(ctx: Context, rep: String?) {
+    fun setRepFilterMulti(ctx: Context, reps: List<String>?) {
+        putStringListPref(ctx, KEY_REP_FILTER_MULTI, reps)
+    }
+
+    /** قائمة أيام فلتر المسارات (JSON) — null عند غياب الفلتر */
+    fun dayFilter(ctx: Context): List<String>? = stringListPref(ctx, KEY_DAY_FILTER)
+
+    fun setDayFilter(ctx: Context, days: List<String>?) {
+        putStringListPref(ctx, KEY_DAY_FILTER, days)
+    }
+
+    private fun stringListPref(ctx: Context, key: String): List<String>? =
+        sp(ctx).getString(key, null)?.let { raw ->
+            runCatching {
+                val arr = org.json.JSONArray(raw)
+                (0 until arr.length()).map { arr.getString(it) }
+            }.getOrNull()
+        }
+
+    private fun putStringListPref(ctx: Context, key: String, values: List<String>?) {
         val editor = sp(ctx).edit()
-        if (rep == null) editor.remove(KEY_REP_FILTER) else editor.putString(KEY_REP_FILTER, rep)
+        if (values == null) editor.remove(key)
+        else editor.putString(key, org.json.JSONArray(values).toString())
         editor.apply()
     }
 
