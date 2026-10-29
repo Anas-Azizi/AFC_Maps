@@ -1,5 +1,6 @@
 package com.repguide.app
 
+import android.content.DialogInterface
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -18,16 +19,19 @@ class RegionStoresSheet : BottomSheetDialogFragment() {
         private var pendingTitle: String = ""
         private var pendingItems: List<StoreListItem> = emptyList()
         private var pendingOnSelect: ((StoreEntity) -> Unit)? = null
+        private var pendingOnDismiss: (() -> Unit)? = null
 
         fun show(
             fm: FragmentManager,
             title: String,
             items: List<StoreListItem>,
-            onSelect: (StoreEntity) -> Unit
+            onSelect: (StoreEntity) -> Unit,
+            onDismiss: (() -> Unit)? = null
         ) {
             pendingTitle = title
             pendingItems = items
             pendingOnSelect = onSelect
+            pendingOnDismiss = onDismiss
             RegionStoresSheet().show(fm, "region_stores")
         }
     }
@@ -64,6 +68,12 @@ class RegionStoresSheet : BottomSheetDialogFragment() {
         })
 
         return binding.root
+    }
+
+    override fun onDismiss(dialog: DialogInterface) {
+        super.onDismiss(dialog)
+        pendingOnDismiss?.invoke()
+        pendingOnDismiss = null
     }
 
     override fun onDestroyView() {

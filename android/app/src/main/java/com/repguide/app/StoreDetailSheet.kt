@@ -18,9 +18,10 @@ class StoreDetailSheet : BottomSheetDialogFragment() {
     companion object {
         const val ACTION_UPDATE_LOCATION = 1
         const val ACTION_ADD_NOTE = 2
-        const val ACTION_UPDATE_BOTH = 3
+        const val ACTION_CANCEL_STORE = 3
         const val ACTION_DRAW_ROUTE = 4
         const val ACTION_SET_LOCATION = 5
+        const val ACTION_RENAME = 6
 
         private const val ARG_ID = "id"
         private const val ARG_NAME = "name"
@@ -186,12 +187,14 @@ class StoreDetailSheet : BottomSheetDialogFragment() {
         if (!perms.canDrawRoute) binding.drawRouteButton.visibility = View.GONE
         if (!perms.canUpdateLocation) binding.updateLocationButton.visibility = View.GONE
         if (!perms.canAddNote) binding.addNoteButton.visibility = View.GONE
-        if (!perms.canUpdateBoth) binding.updateBothButton.visibility = View.GONE
+        if (!perms.canUpdateBoth) binding.cancelStoreButton.visibility = View.GONE
+        if (!perms.canRename) binding.renameStoreButton.visibility = View.GONE
         if (onAction == null || store == null) {
             binding.drawRouteButton.visibility = View.GONE
             binding.updateLocationButton.visibility = View.GONE
             binding.addNoteButton.visibility = View.GONE
-            binding.updateBothButton.visibility = View.GONE
+            binding.cancelStoreButton.visibility = View.GONE
+            binding.renameStoreButton.visibility = View.GONE
         } else {
             binding.drawRouteButton.setOnClickListener {
                 dismiss()
@@ -205,9 +208,13 @@ class StoreDetailSheet : BottomSheetDialogFragment() {
                 dismiss()
                 onAction(store, ACTION_ADD_NOTE)
             }
-            binding.updateBothButton.setOnClickListener {
+            binding.renameStoreButton.setOnClickListener {
                 dismiss()
-                onAction(store, ACTION_UPDATE_BOTH)
+                onAction(store, ACTION_RENAME)
+            }
+            binding.cancelStoreButton.setOnClickListener {
+                dismiss()
+                onAction(store, ACTION_CANCEL_STORE)
             }
         }
 

@@ -63,44 +63,57 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      */
     private fun effectiveReps(ctx: Application): List<String>? {
         val allowed = Prefs.permissions(ctx).reps?.takeIf { it.isNotEmpty() }
-        val filter = Prefs.repFilter(ctx)
+        val selected = Prefs.repFilterMulti(ctx)
         return when {
-            allowed != null && filter != null && allowed.contains(filter) -> listOf(filter)
+            allowed != null && selected != null ->
+                selected.filter { allowed.contains(it) }.ifEmpty { allowed }
             allowed != null -> allowed
-            filter != null -> listOf(filter)
+            selected != null -> selected
             else -> null
         }
     }
 
-    /** يعيد حساب المحلات المرئية وقائمة المناديب من قاعدة البيانات */
+    /** يعيد حساب المحلات المرئية وقوائم المناديب والأيام من قاعدة البيانات */
     fun refreshVisibility() {
         val ctx = getApplication<Application>()
         viewModelScope.launch {
-            // مسح فلتر مندوب لم يعد ضمن المندوبين المسموحين
+            // مسح مندوبين اختارهم المستخدم ولم يعودوا ضمن المسموحين
             val allowed = Prefs.permissions(ctx).reps?.takeIf { it.isNotEmpty() }
-            val currentFilter = Prefs.repFilter(ctx)
-            if (allowed != null && currentFilter != null && !allowed.contains(currentFilter)) {
-                Prefs.setRepFilter(ctx, null)
+            val selected = Prefs.repFilterMulti(ctx)
+            if (allowed != null && selected != null) {
+                val cleaned = selected.filter { allowed.contains(it) }
+                if (cleaned.size != selected.size) {
+                    Prefs.setRepFilterMulti(ctx, cleaned.ifEmpty { null })
+                }
             }
             val reps = effectiveReps(ctx)
-            val (ids, names) = withContext(Dispatchers.IO) {
-                val ids = reps?.let { dao.storeIdsForReps(it).toSet() }
-                ids to dao.allRepNames()
+            val days = Prefs.dayFilter(ctx)
+            val data = withContext(Dispatchers.IO) {
+                val byReps = reps?.let { dao.storeIdsForReps(it).toSet() }
+                val byDays = days?.let { dao.storeIdsForDays(it).toSet() }
+                val ids = when {
+                    byReps != null && byDays != null -> byReps intersect byDays
+                    else -> byReps ?: byDays
+                }
+                Triple(ids, dao.allRepNames(), dao.allVisitDays())
             }
             _state.update {
                 it.copy(
-                    visibleStoreIds = ids,
-                    repNames = names,
-                    repFilter = Prefs.repFilter(ctx)
+                    visibleStoreIds = data.first,
+                    repNames = data.second,
+                    visitDays = data.third,
+                    repFilter = Prefs.repFilterMulti(ctx),
+                    dayFilter = Prefs.dayFilter(ctx)
                 )
             }
         }
     }
 
-    /** اختيار مندوب للفلترة — null («الكل») يمسح الفلتر */
-    fun setRepFilter(rep: String?) {
+    /** حفظ فلتر المسارات (مندوبون وأيام) — null يمسح الفلتر المعني */
+    fun setRouteFilters(reps: List<String>?, days: List<String>?) {
         val ctx = getApplication<Application>()
-        Prefs.setRepFilter(ctx, rep)
+        Prefs.setRepFilterMulti(ctx, reps)
+        Prefs.setDayFilter(ctx, days)
         refreshVisibility()
     }
 
@@ -249,7 +262,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 ApiClient.submitStoreUpdate(
                     Prefs.serverUrl(ctx), token, u.storeId, u.storeName, u.lat, u.lng, u.note,
-                    ctx.getString(R.string.error_unknown)
+                    ctx.getString(R.string.error_unknown), u.newName, u.cancel
                 )
                 dao.deletePendingUpdate(u.id)
             } catch (e: ApiClient.ApiException) {
@@ -261,13 +274,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** تحديث مقترح على محل موجود: موقع جديد و/أو ملاحظة — فوري أو محلي عند غياب الاتصال */
-    fun submitStoreUpdate(store: StoreEntity, lat: Double?, lng: Double?, note: String?) {
+    /** تحديث مقترح على محل موجود: موقع جديد، ملاحظة، اسم جديد أو إلغاء نهائي — فوري أو محلي عند غياب الاتصال */
+    fun submitStoreUpdate(
+        store: StoreEntity,
+        lat: Double?,
+        lng: Double?,
+        note: String?,
+        newName: String? = null,
+        cancel: Boolean = false
+    ) {
         val ctx = getApplication<Application>()
         viewModelScope.launch {
             val entity = PendingUpdateEntity(
                 storeId = store.id, storeName = store.name,
                 lat = lat, lng = lng, note = note,
+                newName = newName, cancel = cancel,
                 createdAt = System.currentTimeMillis()
             )
             val token = Prefs.token(ctx)
@@ -277,7 +298,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     withContext(Dispatchers.IO) {
                         ApiClient.submitStoreUpdate(
                             Prefs.serverUrl(ctx), token, store.id, store.name, lat, lng, note,
-                            ctx.getString(R.string.error_unknown)
+                            ctx.getString(R.string.error_unknown), newName, cancel
                         )
                     }
                 } catch (e: ApiClient.ApiException) {

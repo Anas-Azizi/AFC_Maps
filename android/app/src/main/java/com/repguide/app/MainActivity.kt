@@ -11,6 +11,7 @@ import android.view.View
 import android.view.inputmethod.InputMethodManager
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
+import android.widget.CheckBox
 import android.widget.FrameLayout
 import android.widget.PopupMenu
 import android.widget.ProgressBar
@@ -30,6 +31,7 @@ import com.repguide.app.data.LandmarkEntity
 import com.repguide.app.data.RegionEntity
 import com.repguide.app.data.StoreEntity
 import com.repguide.app.databinding.ActivityMainBinding
+import com.repguide.app.databinding.DialogRouteFilterBinding
 import com.repguide.app.databinding.DialogServerBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -102,8 +104,12 @@ class MainActivity : AppCompatActivity() {
     private var routeOutline: Polyline? = null
     private var visibleStoreIds: Set<Int>? = null
     private var repNames: List<String> = emptyList()
-    private var repFilter: String? = null
+    private var visitDays: List<String> = emptyList()
+    private var repFilter: List<String>? = null
+    private var dayFilter: List<String>? = null
     private var pinsHidden = false
+    private var regionSheetOpen = false
+    private var gpsConfirmMarker: Marker? = null
     private lateinit var suggestionAdapter: StoreListAdapter
 
     private val locationPermissionLauncher =
@@ -191,6 +197,10 @@ class MainActivity : AppCompatActivity() {
 
         binding.menuButton.setOnClickListener { showMenu() }
 
+        binding.regionStoresButton.setOnClickListener {
+            selectedRegionId?.let { showRegionStores(it) }
+        }
+
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 vm.state.collect { state ->
@@ -205,7 +215,9 @@ class MainActivity : AppCompatActivity() {
                     binding.syncButton.isEnabled = !state.syncing
                     visibleStoreIds = state.visibleStoreIds
                     repNames = state.repNames
+                    visitDays = state.visitDays
                     repFilter = state.repFilter
+                    dayFilter = state.dayFilter
                     binding.statusText.text = if (state.syncing) {
                         getString(R.string.syncing)
                     } else {
@@ -331,6 +343,20 @@ class MainActivity : AppCompatActivity() {
         // المحلات بلا إحداثيات تظهر في البحث والقوائم لكن ليس على الخريطة
         storeOverlay.stores = filtered.filter { it.lat != null && it.lng != null }
         binding.map.invalidate()
+        updateRegionStoresButton()
+    }
+
+    /** زر عائم لإعادة فتح قائمة محلات المنطقة بعد إغلاقها — يظهر فقط مع منطقة مختارة والقائمة مغلقة */
+    private fun updateRegionStoresButton() {
+        val regionId = selectedRegionId
+        if (regionId == null || regionSheetOpen) {
+            binding.regionStoresButton.visibility = View.GONE
+            return
+        }
+        val ids = visibleStoreIds
+        val count = stores.count { it.regionId == regionId && (ids == null || it.id in ids) }
+        binding.regionStoresButton.text = getString(R.string.region_stores_reopen, count)
+        binding.regionStoresButton.visibility = View.VISIBLE
     }
 
     private fun zoomToRegion(regionId: Int) {
@@ -445,14 +471,21 @@ class MainActivity : AppCompatActivity() {
         val items = regionStores.map {
             StoreListItem(it, it.ownerName?.takeIf { o -> o.isNotBlank() } ?: region.name)
         }
+        regionSheetOpen = true
+        updateRegionStoresButton()
         RegionStoresSheet.show(
             supportFragmentManager,
             getString(R.string.region_stores_title, region.name, regionStores.size),
-            items
-        ) { store ->
-            if (store.lat != null && store.lng != null) highlightAndZoomTo(store)
-            showStoreDetail(store, region.name)
-        }
+            items,
+            onSelect = { store ->
+                if (store.lat != null && store.lng != null) highlightAndZoomTo(store)
+                showStoreDetail(store, region.name)
+            },
+            onDismiss = {
+                regionSheetOpen = false
+                updateRegionStoresButton()
+            }
+        )
     }
 
     private fun enableMyLocation() {
@@ -473,9 +506,7 @@ class MainActivity : AppCompatActivity() {
         popup.menu.add(getString(if (landmarksVisible) R.string.hide_landmarks else R.string.show_landmarks))
         popup.menu.add(getString(if (pinsHidden) R.string.show_pins else R.string.hide_pins))
         if (perms.canFilterByRep) {
-            val label = getString(R.string.rep_filter) +
-                    (repFilter?.let { ": $it" } ?: "")
-            popup.menu.add(label)
+            popup.menu.add(getString(R.string.route_filter) + routeFilterSummary())
         }
         if (perms.showServerAddress) popup.menu.add(getString(R.string.server_settings))
         if (perms.canDownloadMaps) {
@@ -497,7 +528,7 @@ class MainActivity : AppCompatActivity() {
                         title == getString(R.string.hide_landmarks) -> toggleLandmarks()
                 title == getString(R.string.hide_pins) ||
                         title == getString(R.string.show_pins) -> togglePins()
-                title.startsWith(getString(R.string.rep_filter)) -> showRepFilterDialog()
+                title.startsWith(getString(R.string.route_filter)) -> showRouteFilterDialog()
                 title == getString(R.string.server_settings) -> showServerDialog()
                 title == getString(R.string.logout) -> logout(showMessage = false)
                 title == getString(R.string.offline_maps_download) ||
@@ -521,19 +552,55 @@ class MainActivity : AppCompatActivity() {
         binding.map.invalidate()
     }
 
-    private fun showRepFilterDialog() {
+    /** ملخص الفلتر الحالي لعرضه بجانب عنوان القائمة — فارغ عند غياب الفلتر */
+    private fun routeFilterSummary(): String {
+        val parts = listOfNotNull(
+            repFilter?.takeIf { it.isNotEmpty() }?.joinToString("، "),
+            dayFilter?.takeIf { it.isNotEmpty() }?.joinToString("، ")
+        )
+        return if (parts.isEmpty()) "" else ": " + parts.joinToString(" / ")
+    }
+
+    /** فلتر المسارات: اختيار متعدد للمندوبين (ضمن المسموحين) ولأيام الزيارة */
+    private fun showRouteFilterDialog() {
         // عند وجود تقييد رؤية بمندوبين، لا تُعرض إلا أسماؤهم
         val allowed = Prefs.permissions(this).reps?.takeIf { it.isNotEmpty() }
-        val shown = allowed?.let { a -> repNames.filter { a.contains(it) }.ifEmpty { a } } ?: repNames
-        val options = listOf(getString(R.string.all_reps)) + shown
-        val current = repFilter
-        val checked = current?.let { shown.indexOf(it) + 1 }?.takeIf { it > 0 } ?: 0
-        AlertDialog.Builder(this)
-            .setTitle(R.string.rep_filter)
-            .setSingleChoiceItems(options.toTypedArray(), checked) { dialog, which ->
-                vm.setRepFilter(if (which <= 0) null else shown.getOrNull(which - 1))
-                dialog.dismiss()
+        val shownReps = allowed?.let { a -> repNames.filter { a.contains(it) }.ifEmpty { a } } ?: repNames
+        val dialogBinding = DialogRouteFilterBinding.inflate(layoutInflater)
+
+        if (shownReps.isEmpty()) {
+            dialogBinding.repsTitle.visibility = View.GONE
+            dialogBinding.repsContainer.visibility = View.GONE
+        }
+        val repBoxes = shownReps.map { rep ->
+            CheckBox(this).apply {
+                text = rep
+                isChecked = repFilter?.contains(rep) == true
             }
+        }
+        repBoxes.forEach { dialogBinding.repsContainer.addView(it) }
+
+        if (visitDays.isEmpty()) {
+            dialogBinding.daysTitle.visibility = View.GONE
+            dialogBinding.daysContainer.visibility = View.GONE
+        }
+        val dayBoxes = visitDays.map { day ->
+            CheckBox(this).apply {
+                text = day
+                isChecked = dayFilter?.contains(day) == true
+            }
+        }
+        dayBoxes.forEach { dialogBinding.daysContainer.addView(it) }
+
+        AlertDialog.Builder(this)
+            .setTitle(R.string.route_filter)
+            .setView(dialogBinding.root)
+            .setPositiveButton(R.string.apply) { _, _ ->
+                val reps = repBoxes.filter { it.isChecked }.map { it.text.toString() }.ifEmpty { null }
+                val days = dayBoxes.filter { it.isChecked }.map { it.text.toString() }.ifEmpty { null }
+                vm.setRouteFilters(reps, days)
+            }
+            .setNeutralButton(R.string.clear) { _, _ -> vm.setRouteFilters(null, null) }
             .setNegativeButton(R.string.cancel, null)
             .show()
     }
@@ -544,27 +611,32 @@ class MainActivity : AppCompatActivity() {
             StoreDetailSheet.ACTION_UPDATE_LOCATION,
             StoreDetailSheet.ACTION_SET_LOCATION -> {
                 val loc = currentLocationOrWarn() ?: return
-                AlertDialog.Builder(this)
-                    .setTitle(R.string.update_location)
-                    .setMessage(
-                        getString(
-                            R.string.confirm_update_location,
-                            storeLabel(store),
-                            loc.latitude,
-                            loc.longitude
-                        )
+                confirmGpsPoint(
+                    loc,
+                    getString(
+                        R.string.confirm_update_location,
+                        storeLabel(store),
+                        loc.latitude,
+                        loc.longitude
                     )
-                    .setPositiveButton(R.string.send) { _, _ ->
-                        vm.submitStoreUpdate(store, loc.latitude, loc.longitude, null)
-                    }
-                    .setNegativeButton(R.string.cancel, null)
-                    .show()
+                ) {
+                    vm.submitStoreUpdate(store, loc.latitude, loc.longitude, null)
+                }
             }
             StoreDetailSheet.ACTION_ADD_NOTE -> showNoteDialog(store, null)
-            StoreDetailSheet.ACTION_UPDATE_BOTH -> {
-                val loc = currentLocationOrWarn() ?: return
-                showNoteDialog(store, loc)
+            StoreDetailSheet.ACTION_CANCEL_STORE -> {
+                AlertDialog.Builder(this)
+                    .setTitle(R.string.cancel_store)
+                    .setMessage(
+                        getString(R.string.confirm_cancel_store) + "\n" + storeLabel(store)
+                    )
+                    .setPositiveButton(R.string.confirm) { _, _ ->
+                        vm.submitStoreUpdate(store, null, null, null, cancel = true)
+                    }
+                    .setNegativeButton(R.string.back, null)
+                    .show()
             }
+            StoreDetailSheet.ACTION_RENAME -> showRenameDialog(store)
         }
     }
 
@@ -649,6 +721,78 @@ class MainActivity : AppCompatActivity() {
         return loc
     }
 
+    /** دبوس مؤقت مميز (أزرق) يوضع على موقع GPS الملتقط أثناء تأكيده */
+    private fun showGpsConfirmMarker(point: GeoPoint) {
+        clearGpsConfirmMarker()
+        val marker = Marker(binding.map)
+        marker.position = point
+        marker.icon = ContextCompat.getDrawable(this, R.drawable.ic_pin)?.mutate()?.apply {
+            setTint(Color.parseColor("#1E88E5"))
+        }
+        marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+        marker.setOnMarkerClickListener { _, _ -> true }
+        gpsConfirmMarker = marker
+        binding.map.overlays.add(marker)
+        binding.map.controller.setZoom(18.0)
+        binding.map.controller.animateTo(point)
+        binding.map.invalidate()
+    }
+
+    private fun clearGpsConfirmMarker() {
+        gpsConfirmMarker?.let { binding.map.overlays.remove(it) }
+        gpsConfirmMarker = null
+        binding.map.invalidate()
+    }
+
+    /**
+     * تأكيد موقع GPS: تكبير الخريطة على النقطة مع دبوس مؤقت ثم حوار تأكيد
+     * يعرض دقة GPS عند توفرها. عند الإلغاء يُزال الدبوس ولا يُرسل شيء.
+     */
+    private fun confirmGpsPoint(point: GeoPoint, message: String, onConfirm: () -> Unit) {
+        showGpsConfirmMarker(point)
+        val accuracy = myLocationOverlay.lastFix?.takeIf { it.hasAccuracy() }?.accuracy
+        val accuracyText = accuracy?.let { "\n" + getString(R.string.gps_accuracy, it.toInt()) }.orEmpty()
+        AlertDialog.Builder(this)
+            .setTitle(R.string.confirm_location_title)
+            .setMessage(message + accuracyText)
+            .setPositiveButton(R.string.confirm) { _, _ ->
+                clearGpsConfirmMarker()
+                onConfirm()
+            }
+            .setNegativeButton(R.string.cancel) { _, _ -> clearGpsConfirmMarker() }
+            .setOnCancelListener { clearGpsConfirmMarker() }
+            .show()
+    }
+
+    private fun showRenameDialog(store: StoreEntity) {
+        val input = android.widget.EditText(this).apply {
+            setText(store.name)
+            setSelection(store.name.length)
+        }
+        val pad = (24 * resources.displayMetrics.density).toInt()
+        val container = FrameLayout(this).apply {
+            setPadding(pad, pad / 2, pad, 0)
+            addView(input)
+        }
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.rename_store_title, storeLabel(store)))
+            .setView(container)
+            .setPositiveButton(R.string.save) { _, _ ->
+                val name = input.text?.toString()?.trim().orEmpty()
+                if (name.isEmpty()) {
+                    Toast.makeText(this, R.string.new_store_name_required, Toast.LENGTH_LONG).show()
+                    return@setPositiveButton
+                }
+                if (name == store.name.trim()) {
+                    Toast.makeText(this, R.string.rename_store_unchanged, Toast.LENGTH_LONG).show()
+                    return@setPositiveButton
+                }
+                vm.submitStoreUpdate(store, null, null, null, newName = name)
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
     private fun showNoteDialog(store: StoreEntity, location: GeoPoint?) {
         val input = android.widget.EditText(this).apply {
             hint = getString(R.string.note_hint)
@@ -680,6 +824,15 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, R.string.new_store_no_location, Toast.LENGTH_LONG).show()
             return
         }
+        confirmGpsPoint(
+            location,
+            getString(R.string.new_store_coords, location.latitude, location.longitude)
+        ) {
+            showNewStoreNameDialog(location)
+        }
+    }
+
+    private fun showNewStoreNameDialog(location: GeoPoint) {
         val input = android.widget.EditText(this).apply {
             hint = getString(R.string.new_store_name_hint)
         }
