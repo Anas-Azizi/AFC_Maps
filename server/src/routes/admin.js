@@ -5,7 +5,7 @@ import { db, bumpDataVersion, withTransaction } from '../db.js';
 import { authRequired, adminRequired, hashPassword } from '../auth.js';
 import { parseDistrictsKmz } from '../kmz.js';
 import { parseCustomersXlsx, parseRoutesXlsx } from '../xlsx.js';
-import { assignRegions } from '../importer.js';
+import { assignRegionsByName } from '../importer.js';
 import { resolvePermissions } from '../permissions.js';
 
 export const adminRouter = Router();
@@ -67,52 +67,59 @@ adminRouter.delete('/users/:id', (req, res) => {
   res.json({ ok: true });
 });
 
-// ---------- المناطق ----------
+// ---------- المناطق (أسماء فقط — تُبنى من ملف الزبائن عند الاستيراد) ----------
 
 adminRouter.get('/regions', (req, res) => {
   const regions = db
-    .prepare(`SELECT r.id, r.name, r.color, r.polygon, r.label_lat AS labelLat, r.label_lng AS labelLng,
+    .prepare(`SELECT r.id, r.name,
               (SELECT COUNT(*) FROM stores s WHERE s.region_id = r.id) AS storeCount
               FROM regions r ORDER BY r.name`)
-    .all()
-    .map((r) => ({ ...r, polygon: r.polygon ? JSON.parse(r.polygon) : null }));
+    .all();
   res.json(regions);
 });
 
-adminRouter.post('/regions', (req, res) => {
-  const { name, color, polygon, labelLat, labelLng } = req.body || {};
-  if (!name) return res.status(400).json({ error: 'اسم المنطقة مطلوب' });
-  try {
-    const info = db
-      .prepare('INSERT INTO regions (name, color, polygon, label_lat, label_lng) VALUES (?, ?, ?, ?, ?)')
-      .run(name, color ?? null, polygon ? JSON.stringify(polygon) : null, labelLat ?? null, labelLng ?? null);
-    bumpDataVersion();
-    res.status(201).json({ id: info.lastInsertRowid });
-  } catch {
-    res.status(409).json({ error: 'اسم المنطقة مستخدم مسبقاً' });
-  }
+// ---------- المضلعات (حدود مرسومة من KMZ — مرجع بصري) ----------
+
+adminRouter.get('/polygons', (req, res) => {
+  const polygons = db
+    .prepare(`SELECT id, name, color, polygon, label_lat AS labelLat, label_lng AS labelLng
+              FROM polygons ORDER BY name`)
+    .all()
+    .map((p) => ({ ...p, polygon: p.polygon ? JSON.parse(p.polygon) : null }));
+  res.json(polygons);
 });
 
-adminRouter.put('/regions/:id', (req, res) => {
-  const id = Number(req.params.id);
-  const region = db.prepare('SELECT * FROM regions WHERE id = ?').get(id);
-  if (!region) return res.status(404).json({ error: 'المنطقة غير موجودة' });
+adminRouter.post('/polygons', (req, res) => {
   const { name, color, polygon, labelLat, labelLng } = req.body || {};
-  db.prepare('UPDATE regions SET name = ?, color = ?, polygon = ?, label_lat = ?, label_lng = ? WHERE id = ?').run(
-    name ?? region.name,
-    color ?? region.color,
-    polygon !== undefined ? (polygon ? JSON.stringify(polygon) : null) : region.polygon,
-    labelLat ?? region.label_lat,
-    labelLng ?? region.label_lng,
+  if (!name) return res.status(400).json({ error: 'اسم المضلع مطلوب' });
+  const info = db
+    .prepare('INSERT INTO polygons (name, color, polygon, label_lat, label_lng) VALUES (?, ?, ?, ?, ?)')
+    .run(name, color ?? null, polygon ? JSON.stringify(polygon) : null, labelLat ?? null, labelLng ?? null);
+  bumpDataVersion();
+  res.status(201).json({ id: info.lastInsertRowid });
+});
+
+adminRouter.put('/polygons/:id', (req, res) => {
+  const id = Number(req.params.id);
+  const row = db.prepare('SELECT * FROM polygons WHERE id = ?').get(id);
+  if (!row) return res.status(404).json({ error: 'المضلع غير موجود' });
+  const { name, color, polygon, labelLat, labelLng } = req.body || {};
+  if (name !== undefined && !name) return res.status(400).json({ error: 'اسم المضلع مطلوب' });
+  db.prepare('UPDATE polygons SET name = ?, color = ?, polygon = ?, label_lat = ?, label_lng = ? WHERE id = ?').run(
+    name ?? row.name,
+    color ?? row.color,
+    polygon !== undefined ? (polygon ? JSON.stringify(polygon) : null) : row.polygon,
+    labelLat ?? row.label_lat,
+    labelLng ?? row.label_lng,
     id
   );
   bumpDataVersion();
   res.json({ ok: true });
 });
 
-adminRouter.delete('/regions/:id', (req, res) => {
-  const info = db.prepare('DELETE FROM regions WHERE id = ?').run(Number(req.params.id));
-  if (!info.changes) return res.status(404).json({ error: 'المنطقة غير موجودة' });
+adminRouter.delete('/polygons/:id', (req, res) => {
+  const info = db.prepare('DELETE FROM polygons WHERE id = ?').run(Number(req.params.id));
+  if (!info.changes) return res.status(404).json({ error: 'المضلع غير موجود' });
   bumpDataVersion();
   res.json({ ok: true });
 });
@@ -537,13 +544,26 @@ adminRouter.post(
     const visits = parsedRoutes.visits.filter((v) => knownCodes.has(v.code));
     const orphanVisits = parsedRoutes.visits.length - visits.length;
 
-    const { regions, stats: assignStats } = assignRegions(parsedCustomers.stores, parsedKmz.regions);
+    // المناطق من ملف الزبائن فقط (بالاسم)، والمضلعات من KMZ فقط
+    const { regions, stats: assignStats } = assignRegionsByName(parsedCustomers.stores);
+    const polygons = parsedKmz.regions
+      .filter((r) => r.polygon)
+      .map((r) => {
+        let { labelLat, labelLng } = r;
+        if (labelLat == null || labelLng == null) {
+          const n = r.polygon.length;
+          labelLat = Math.round((r.polygon.reduce((s, p) => s + p[0], 0) / n) * 1e7) / 1e7;
+          labelLng = Math.round((r.polygon.reduce((s, p) => s + p[1], 0) / n) * 1e7) / 1e7;
+        }
+        return { name: r.name, labelLat, labelLng, polygon: r.polygon };
+      });
 
     const importId = crypto.randomUUID();
     pendingImports.set(importId, {
       stores: parsedCustomers.stores,
       visits,
       regions,
+      polygons,
       landmarks: parsedKmz.landmarks,
       at: Date.now(),
     });
@@ -553,7 +573,7 @@ adminRouter.post(
       importId,
       stats: {
         regions: regions.length,
-        polygons: regions.filter((r) => r.polygon).length,
+        polygons: polygons.length,
         landmarks: parsedKmz.landmarks.length,
         stores: parsedCustomers.stats.total,
         storesNoCoords: parsedCustomers.stats.noCoords,
@@ -562,15 +582,14 @@ adminRouter.post(
         visits: visits.length,
         visitCustomers: parsedRoutes.stats.customers,
         orphanVisits,
-        assignedByPolygon: assignStats.byPolygon,
         assignedByName: assignStats.byName,
         noRegion: assignStats.noRegion,
       },
       regions: regions.map((r) => ({
         name: r.name,
         storeCount: r.storeCount,
-        hasPolygon: !!r.polygon,
       })),
+      polygons: polygons.map((p) => p.name),
     });
   }
 );
@@ -585,20 +604,21 @@ adminRouter.post('/import/confirm', (req, res) => {
     db.exec('DELETE FROM visits');
     db.exec('DELETE FROM stores');
     db.exec('DELETE FROM regions');
+    db.exec('DELETE FROM polygons');
     db.exec('DELETE FROM landmarks');
 
-    const insertRegion = db.prepare(
-      'INSERT INTO regions (name, polygon, label_lat, label_lng) VALUES (?, ?, ?, ?)'
-    );
+    const insertRegion = db.prepare('INSERT INTO regions (name) VALUES (?)');
     const regionIds = new Map();
     for (const r of pending.regions) {
-      const info = insertRegion.run(
-        r.name,
-        r.polygon ? JSON.stringify(r.polygon) : null,
-        r.labelLat,
-        r.labelLng
-      );
+      const info = insertRegion.run(r.name);
       regionIds.set(r.name, info.lastInsertRowid);
+    }
+
+    const insertPolygon = db.prepare(
+      'INSERT INTO polygons (name, color, polygon, label_lat, label_lng) VALUES (?, ?, ?, ?, ?)'
+    );
+    for (const p of pending.polygons) {
+      insertPolygon.run(p.name, p.color ?? null, JSON.stringify(p.polygon), p.labelLat, p.labelLng);
     }
 
     const insertLandmark = db.prepare('INSERT INTO landmarks (name, lat, lng) VALUES (?, ?, ?)');

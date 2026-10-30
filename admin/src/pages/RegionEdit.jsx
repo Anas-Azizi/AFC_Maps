@@ -7,7 +7,7 @@ import { api } from '../api.js';
 const ALEPPO = [36.2, 37.13];
 
 // تعريب أزرار الرسم
-L.drawLocal.draw.toolbar.buttons.polygon = 'رسم حدود المنطقة';
+L.drawLocal.draw.toolbar.buttons.polygon = 'رسم حدود المضلع';
 L.drawLocal.draw.handlers.polygon.tooltip.start = 'انقر لبدء رسم الحدود';
 L.drawLocal.draw.handlers.polygon.tooltip.cont = 'انقر لمتابعة الرسم';
 L.drawLocal.draw.handlers.polygon.tooltip.end = 'انقر على النقطة الأولى لإنهاء الرسم';
@@ -44,23 +44,23 @@ export default function RegionEdit() {
   const drawnItemsRef = useRef(null);
   const labelMarkerRef = useRef(null);
 
-  // تحميل بيانات المنطقة عند التعديل
+  // تحميل بيانات المضلع عند التعديل
   useEffect(() => {
     if (isNew) return;
-    api.listRegions()
-      .then((regions) => {
-        const region = regions.find((r) => r.id === Number(id));
-        if (!region) {
-          setError('المنطقة غير موجودة');
+    api.listPolygons()
+      .then((polygons) => {
+        const polygon = polygons.find((p) => p.id === Number(id));
+        if (!polygon) {
+          setError('المضلع غير موجود');
           return;
         }
-        setName(region.name);
-        if (region.color) setColor(region.color);
-        if (region.labelLat != null && region.labelLng != null) {
-          setLabelPos([region.labelLat, region.labelLng]);
+        setName(polygon.name);
+        if (polygon.color) setColor(polygon.color);
+        if (polygon.labelLat != null && polygon.labelLng != null) {
+          setLabelPos([polygon.labelLat, polygon.labelLng]);
         }
-        if (region.polygon && drawnItemsRef.current) {
-          const layer = L.polygon(region.polygon);
+        if (polygon.polygon && drawnItemsRef.current) {
+          const layer = L.polygon(polygon.polygon);
           drawnItemsRef.current.clearLayers();
           drawnItemsRef.current.addLayer(layer);
           setHasPolygon(true);
@@ -138,7 +138,7 @@ export default function RegionEdit() {
     }
     if (labelPos) {
       const marker = L.marker(labelPos, { draggable: true }).addTo(map);
-      marker.bindTooltip('موقع اسم المنطقة').openTooltip();
+      marker.bindTooltip('موقع اسم المضلع').openTooltip();
       marker.on('dragend', () => {
         const p = marker.getLatLng();
         setLabelPos([p.lat, p.lng]);
@@ -162,8 +162,8 @@ export default function RegionEdit() {
         labelLat: labelPos ? labelPos[0] : null,
         labelLng: labelPos ? labelPos[1] : null,
       };
-      if (isNew) await api.createRegion(payload);
-      else await api.updateRegion(Number(id), payload);
+      if (isNew) await api.createPolygon(payload);
+      else await api.updatePolygon(Number(id), payload);
       navigate('/regions');
     } catch (err) {
       setError(err.message);
@@ -176,14 +176,14 @@ export default function RegionEdit() {
 
   return (
     <div>
-      <h1>{isNew ? 'إضافة منطقة جديدة' : `تعديل المنطقة: ${name}`}</h1>
+      <h1>{isNew ? 'إضافة مضلع جديد' : `تعديل المضلع: ${name}`}</h1>
       {error && <div className="alert alert-error">{error}</div>}
 
       <div className="card">
         <form onSubmit={onSave}>
           <div className="form-grid">
             <div className="form-field">
-              <label>اسم المنطقة</label>
+              <label>اسم المضلع</label>
               <input type="text" value={name} onChange={(e) => setName(e.target.value)} required />
             </div>
             <div className="form-field">
@@ -193,7 +193,7 @@ export default function RegionEdit() {
           </div>
 
           <p className="muted">
-            استخدم أداة الرسم في الخريطة لرسم حدود المنطقة. انقر في أي مكان على الخريطة لتحديد موقع اسم المنطقة (التسمية).
+            استخدم أداة الرسم في الخريطة لرسم حدود المضلع. انقر في أي مكان على الخريطة لتحديد موقع اسم المضلع (التسمية).
           </p>
           <p className="muted">
             الحدود: {hasPolygon ? 'مرسومة' : 'غير مرسومة'}

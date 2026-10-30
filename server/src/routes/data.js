@@ -6,9 +6,12 @@ export const dataRouter = Router();
 
 dataRouter.get('/snapshot', authRequired, (req, res) => {
   const regions = db
-    .prepare('SELECT id, name, color, polygon, label_lat AS labelLat, label_lng AS labelLng FROM regions ORDER BY name')
+    .prepare('SELECT id, name FROM regions ORDER BY name')
+    .all();
+  const polygons = db
+    .prepare('SELECT id, name, color, polygon, label_lat AS labelLat, label_lng AS labelLng FROM polygons ORDER BY name')
     .all()
-    .map((r) => ({ ...r, polygon: r.polygon ? JSON.parse(r.polygon) : null }));
+    .map((p) => ({ ...p, polygon: p.polygon ? JSON.parse(p.polygon) : null }));
   const stores = db
     .prepare(`SELECT id, name, owner_name AS ownerName, phone, whatsapp, lat, lng, region_id AS regionId, notes,
               code, address, account_type AS accountType, status, category,
@@ -20,7 +23,7 @@ dataRouter.get('/snapshot', authRequired, (req, res) => {
               FROM visits v JOIN stores s ON s.id = v.store_id WHERE s.map_show = 1 ORDER BY v.id`)
     .all();
   const landmarks = db.prepare('SELECT id, name, lat, lng FROM landmarks ORDER BY name').all();
-  res.json({ version: getDataVersion(), regions, stores, visits, landmarks });
+  res.json({ version: getDataVersion(), regions, polygons, stores, visits, landmarks });
 });
 
 // وقت الإجراء من الجهاز (مللي ثانية) → نص ISO؛ أي قيمة غير صالحة = null

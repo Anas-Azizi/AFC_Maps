@@ -106,4 +106,5 @@
     <string name="apply">تطبيق</string>
     <string name="clear">مسح</string>
     <string name="region_stores_reopen">محلات المنطقة (%1$d)</string>
+    <string name="region_no_visible_stores">لا توجد محلات ظاهرة في هذه المنطقة</string>
 </resources>

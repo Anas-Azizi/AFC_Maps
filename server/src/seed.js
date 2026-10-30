@@ -30,10 +30,15 @@ const parsed = parseKmz(fs.readFileSync(kmzPath));
 const apply = () => withTransaction(() => {
   db.exec('DELETE FROM stores');
   db.exec('DELETE FROM regions');
-  const insertRegion = db.prepare('INSERT INTO regions (name, polygon, label_lat, label_lng) VALUES (?, ?, ?, ?)');
+  db.exec('DELETE FROM polygons');
+  const insertRegion = db.prepare('INSERT INTO regions (name) VALUES (?)');
+  const insertPolygon = db.prepare('INSERT INTO polygons (name, polygon, label_lat, label_lng) VALUES (?, ?, ?, ?)');
   const insertStore = db.prepare('INSERT INTO stores (name, lat, lng, region_id) VALUES (?, ?, ?, ?)');
   for (const region of parsed.regions) {
-    const info = insertRegion.run(region.name, region.polygon ? JSON.stringify(region.polygon) : null, region.labelLat, region.labelLng);
+    const info = insertRegion.run(region.name);
+    if (region.polygon) {
+      insertPolygon.run(region.name, JSON.stringify(region.polygon), region.labelLat, region.labelLng);
+    }
     for (const store of region.stores) {
       insertStore.run(store.name, store.lat, store.lng, info.lastInsertRowid);
     }

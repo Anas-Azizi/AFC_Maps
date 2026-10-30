@@ -18,9 +18,17 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- المناطق: أسماء مناطق الزبائن الحقيقية (من ملف الزبائن Excel) — بلا هندسة
+-- (قواعد البيانات القديمة تحتفظ بأعمدة polygon/label/color المتروكة دون استخدام)
 CREATE TABLE IF NOT EXISTS regions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL UNIQUE
+);
+
+-- المضلعات مرسومة الحدود (من KMZ) — مرجع بصري بحت، مستقلة عن جدول المناطق
+CREATE TABLE IF NOT EXISTS polygons (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
   color TEXT,
   polygon TEXT,
   label_lat REAL,

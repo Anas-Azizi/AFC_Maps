@@ -6,6 +6,13 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "regions")
 data class RegionEntity(
     @PrimaryKey val id: Int,
+    val name: String
+)
+
+/** حدود مرسومة على الخريطة — مرئية فقط ولا علاقة لها بالفلترة */
+@Entity(tableName = "polygons")
+data class PolygonEntity(
+    @PrimaryKey val id: Int,
     val name: String,
     val color: String?,
     val polygonJson: String?,

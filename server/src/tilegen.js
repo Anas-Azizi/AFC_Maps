@@ -58,7 +58,7 @@ function tileKey(z, x, y) {
 function computeBbox() {
   const row = db.prepare('SELECT MIN(lat) mn, MAX(lat) mx, MIN(lng) ml, MAX(lng) mg FROM stores').get();
   let minLat = row.mn ?? 90, maxLat = row.mx ?? -90, minLng = row.ml ?? 180, maxLng = row.mg ?? -180;
-  for (const r of db.prepare('SELECT polygon FROM regions WHERE polygon IS NOT NULL').all()) {
+  for (const r of db.prepare('SELECT polygon FROM polygons WHERE polygon IS NOT NULL').all()) {
     try {
       for (const [lat, lng] of JSON.parse(r.polygon)) {
         if (lat < minLat) minLat = lat;

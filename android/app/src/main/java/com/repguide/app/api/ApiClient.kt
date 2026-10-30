@@ -1,6 +1,7 @@
 package com.repguide.app.api
 
 import com.repguide.app.data.LandmarkEntity
+import com.repguide.app.data.PolygonEntity
 import com.repguide.app.data.RegionEntity
 import com.repguide.app.data.StoreEntity
 import com.repguide.app.data.VisitEntity
@@ -29,6 +30,7 @@ object ApiClient {
     data class Snapshot(
         val version: Int,
         val regions: List<RegionEntity>,
+        val polygons: List<PolygonEntity>,
         val stores: List<StoreEntity>,
         val landmarks: List<LandmarkEntity>,
         val visits: List<VisitEntity>
@@ -152,13 +154,27 @@ object ApiClient {
             regions.add(
                 RegionEntity(
                     id = r.getInt("id"),
-                    name = r.getString("name"),
-                    color = if (r.isNull("color")) null else r.getString("color"),
-                    polygonJson = if (r.isNull("polygon")) null else r.getJSONArray("polygon").toString(),
-                    labelLat = if (r.isNull("labelLat")) null else r.getDouble("labelLat"),
-                    labelLng = if (r.isNull("labelLng")) null else r.getDouble("labelLng")
+                    name = r.getString("name")
                 )
             )
+        }
+
+        val polygonsJson = json.optJSONArray("polygons")
+        val polygons = ArrayList<PolygonEntity>(polygonsJson?.length() ?: 0)
+        if (polygonsJson != null) {
+            for (i in 0 until polygonsJson.length()) {
+                val p = polygonsJson.getJSONObject(i)
+                polygons.add(
+                    PolygonEntity(
+                        id = p.getInt("id"),
+                        name = p.getString("name"),
+                        color = if (p.isNull("color")) null else p.getString("color"),
+                        polygonJson = if (p.isNull("polygon")) null else p.getJSONArray("polygon").toString(),
+                        labelLat = if (p.isNull("labelLat")) null else p.getDouble("labelLat"),
+                        labelLng = if (p.isNull("labelLng")) null else p.getDouble("labelLng")
+                    )
+                )
+            }
         }
 
         val storesJson = json.getJSONArray("stores")
@@ -221,7 +237,7 @@ object ApiClient {
                 )
             }
         }
-        return Snapshot(json.optInt("version", 0), regions, stores, landmarks, visits)
+        return Snapshot(json.optInt("version", 0), regions, polygons, stores, landmarks, visits)
     }
 
     data class TilesInfo(

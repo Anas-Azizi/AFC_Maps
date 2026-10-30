@@ -124,9 +124,35 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
     }
 }
 
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // فصل المناطق (أسماء فقط للفلترة) عن المضلعات (رسم مرئي فقط)
+        // لا DROP COLUMN في SQLite القديم — إعادة بناء الجدول
+        db.execSQL("ALTER TABLE regions RENAME TO regions_old")
+        db.execSQL(
+            """CREATE TABLE regions (
+                id INTEGER PRIMARY KEY NOT NULL,
+                name TEXT NOT NULL
+            )"""
+        )
+        db.execSQL("INSERT INTO regions (id, name) SELECT id, name FROM regions_old")
+        db.execSQL("DROP TABLE regions_old")
+        db.execSQL(
+            """CREATE TABLE IF NOT EXISTS polygons (
+                id INTEGER PRIMARY KEY NOT NULL,
+                name TEXT NOT NULL,
+                color TEXT,
+                polygonJson TEXT,
+                labelLat REAL,
+                labelLng REAL
+            )"""
+        )
+    }
+}
+
 @Database(
-    entities = [RegionEntity::class, StoreEntity::class, PendingSubmissionEntity::class, PendingUpdateEntity::class, LandmarkEntity::class, VisitEntity::class],
-    version = 6,
+    entities = [RegionEntity::class, StoreEntity::class, PendingSubmissionEntity::class, PendingUpdateEntity::class, LandmarkEntity::class, VisitEntity::class, PolygonEntity::class],
+    version = 7,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -142,7 +168,7 @@ abstract class AppDatabase : RoomDatabase() {
                     ctx.applicationContext,
                     AppDatabase::class.java,
                     "rep_guide.db"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7).build().also { instance = it }
             }
     }
 }

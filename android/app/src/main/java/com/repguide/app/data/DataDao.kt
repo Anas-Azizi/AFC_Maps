@@ -14,6 +14,9 @@ interface DataDao {
     @Query("SELECT * FROM regions ORDER BY name")
     suspend fun allRegions(): List<RegionEntity>
 
+    @Query("SELECT * FROM polygons ORDER BY name")
+    suspend fun allPolygons(): List<PolygonEntity>
+
     @Query("SELECT * FROM stores ORDER BY name")
     suspend fun allStores(): List<StoreEntity>
 
@@ -22,6 +25,9 @@ interface DataDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertRegions(regions: List<RegionEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPolygons(polygons: List<PolygonEntity>)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertStores(stores: List<StoreEntity>)
@@ -55,6 +61,9 @@ interface DataDao {
     @Query("DELETE FROM regions")
     suspend fun clearRegions()
 
+    @Query("DELETE FROM polygons")
+    suspend fun clearPolygons()
+
     @Query("DELETE FROM landmarks")
     suspend fun clearLandmarks()
 
@@ -64,15 +73,18 @@ interface DataDao {
     @Transaction
     suspend fun replaceAll(
         regions: List<RegionEntity>,
+        polygons: List<PolygonEntity>,
         stores: List<StoreEntity>,
         landmarks: List<LandmarkEntity>,
         visits: List<VisitEntity>
     ) {
         clearStores()
         clearRegions()
+        clearPolygons()
         clearLandmarks()
         clearVisits()
         insertRegions(regions)
+        insertPolygons(polygons)
         insertStores(stores)
         insertLandmarks(landmarks)
         insertVisits(visits)
@@ -82,6 +94,7 @@ interface DataDao {
     suspend fun clearAll() {
         clearStores()
         clearRegions()
+        clearPolygons()
         clearLandmarks()
         clearVisits()
     }

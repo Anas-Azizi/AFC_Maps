@@ -17,7 +17,7 @@ export default function Layout() {
         <nav>
           <NavLink to="/" end>لوحة التحكم</NavLink>
           <NavLink to="/users">المستخدمون</NavLink>
-          <NavLink to="/regions">المناطق</NavLink>
+          <NavLink to="/regions">المضلعات</NavLink>
           <NavLink to="/stores">الزبائن</NavLink>
           <NavLink to="/reports">التقارير</NavLink>
           <NavLink to="/submissions">المحلات الميدانية</NavLink>

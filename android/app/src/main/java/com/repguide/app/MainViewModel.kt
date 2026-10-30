@@ -8,6 +8,7 @@ import com.repguide.app.data.AppDatabase
 import com.repguide.app.data.LandmarkEntity
 import com.repguide.app.data.PendingSubmissionEntity
 import com.repguide.app.data.PendingUpdateEntity
+import com.repguide.app.data.PolygonEntity
 import com.repguide.app.data.RegionEntity
 import com.repguide.app.data.StoreEntity
 import com.repguide.app.data.VisitEntity
@@ -27,6 +28,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     data class UiState(
         val regions: List<RegionEntity> = emptyList(),
+        val polygons: List<PolygonEntity> = emptyList(),
         val stores: List<StoreEntity> = emptyList(),
         val landmarks: List<LandmarkEntity> = emptyList(),
         val syncing: Boolean = false,
@@ -48,14 +50,33 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun loadLocal(syncIfEmpty: Boolean = true) {
         viewModelScope.launch {
-            val (regions, stores, landmarks) = withContext(Dispatchers.IO) {
-                Triple(dao.allRegions(), dao.allStores(), dao.allLandmarks())
+            val local = withContext(Dispatchers.IO) {
+                LocalData(
+                    regions = dao.allRegions(),
+                    polygons = dao.allPolygons(),
+                    stores = dao.allStores(),
+                    landmarks = dao.allLandmarks()
+                )
             }
-            _state.update { it.copy(regions = regions, stores = stores, landmarks = landmarks) }
+            _state.update {
+                it.copy(
+                    regions = local.regions,
+                    polygons = local.polygons,
+                    stores = local.stores,
+                    landmarks = local.landmarks
+                )
+            }
             refreshVisibility()
-            if (syncIfEmpty && stores.isEmpty()) sync()
+            if (syncIfEmpty && local.stores.isEmpty()) sync()
         }
     }
+
+    private data class LocalData(
+        val regions: List<RegionEntity>,
+        val polygons: List<PolygonEntity>,
+        val stores: List<StoreEntity>,
+        val landmarks: List<LandmarkEntity>
+    )
 
     /**
      * المناديب الفعّالون: تقييد الصلاحيات حدّ أقصى دائماً، وفلتر المستخدم
@@ -150,12 +171,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 }
                 withContext(Dispatchers.IO) {
-                    dao.replaceAll(snapshot.regions, snapshot.stores, snapshot.landmarks, snapshot.visits)
+                    dao.replaceAll(
+                        snapshot.regions, snapshot.polygons,
+                        snapshot.stores, snapshot.landmarks, snapshot.visits
+                    )
                     Prefs.setDataVersion(ctx, snapshot.version)
                 }
                 _state.update {
                     it.copy(
                         regions = snapshot.regions,
+                        polygons = snapshot.polygons,
                         stores = snapshot.stores,
                         landmarks = snapshot.landmarks,
                         event = Event.Message(

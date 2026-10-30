@@ -53,9 +53,11 @@ export const api = {
   deleteUser: (id) => request(`/api/admin/users/${id}`, { method: 'DELETE' }),
 
   listRegions: () => request('/api/admin/regions'),
-  createRegion: (r) => request('/api/admin/regions', { method: 'POST', body: r }),
-  updateRegion: (id, r) => request(`/api/admin/regions/${id}`, { method: 'PUT', body: r }),
-  deleteRegion: (id) => request(`/api/admin/regions/${id}`, { method: 'DELETE' }),
+
+  listPolygons: () => request('/api/admin/polygons'),
+  createPolygon: (p) => request('/api/admin/polygons', { method: 'POST', body: p }),
+  updatePolygon: (id, p) => request(`/api/admin/polygons/${id}`, { method: 'PUT', body: p }),
+  deletePolygon: (id) => request(`/api/admin/polygons/${id}`, { method: 'DELETE' }),
 
   listStores: (filters = {}) => {
     const params = new URLSearchParams();

@@ -40,7 +40,7 @@ export default function Import() {
 
   const onConfirm = async () => {
     if (!preview) return;
-    if (!window.confirm('سيتم مسح جميع البيانات الحالية (المناطق والزبائن والزيارات والمعالم) واستيراد البيانات الجديدة. هل أنت متأكد؟')) return;
+    if (!window.confirm('سيتم مسح جميع البيانات الحالية (المناطق والمضلعات والزبائن والزيارات والمعالم) واستيراد البيانات الجديدة. هل أنت متأكد؟')) return;
     setError('');
     setBusy(true);
     try {
@@ -74,7 +74,7 @@ export default function Import() {
         <div className="card">
           <form onSubmit={onUpload}>
             <div className="form-field" style={{ maxWidth: 400, marginBottom: 14 }}>
-              <label>ملف KMZ (حدود المناطق وأسماؤها والمعالم — من Google Earth)</label>
+              <label>ملف KMZ (المضلعات والمعالم — من Google Earth)</label>
               <input ref={kmzRef} type="file" accept=".kmz" />
             </div>
             <div className="form-field" style={{ maxWidth: 400, marginBottom: 14 }}>
@@ -111,7 +111,11 @@ export default function Import() {
               </div>
               <div className="stat-card">
                 <div className="stat-value">{preview.stats.regions}</div>
-                <div className="stat-label">المناطق</div>
+                <div className="stat-label">مناطق (من ملف الزبائن)</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-value">{preview.stats.polygons}</div>
+                <div className="stat-label">مضلعات (من KMZ)</div>
               </div>
               <div className="stat-card">
                 <div className="stat-value">{preview.stats.landmarks}</div>
@@ -120,7 +124,7 @@ export default function Import() {
             </div>
 
             <div className="alert alert-warning" style={{ marginBottom: 8 }}>
-              تعيين المناطق: {preview.stats.assignedByPolygon} مكانياً (داخل المضلع) + {preview.stats.assignedByName} بمطابقة الاسم
+              تعيين المناطق بالاسم (من عمود المنطقة في ملف الزبائن): {preview.stats.assignedByName} معيّناً
               {preview.stats.noRegion > 0 && ` — ${preview.stats.noRegion} بلا منطقة`}
             </div>
             {preview.stats.cancelled > 0 && (
@@ -144,7 +148,6 @@ export default function Import() {
                 <tr>
                   <th>المنطقة</th>
                   <th>عدد الزبائن</th>
-                  <th>المضلع</th>
                 </tr>
               </thead>
               <tbody>
@@ -152,11 +155,6 @@ export default function Import() {
                   <tr key={r.name}>
                     <td>{r.name}</td>
                     <td>{r.storeCount}</td>
-                    <td>
-                      <span className={`badge ${r.hasPolygon ? 'badge-green' : 'badge-gray'}`}>
-                        {r.hasPolygon ? 'موجود' : 'بدون حدود'}
-                      </span>
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -166,7 +164,7 @@ export default function Import() {
           <div className="card">
             <h2>تأكيد الاستيراد</h2>
             <p className="muted" style={{ marginBottom: 16 }}>
-              سيستبدل هذا الإجراء كل المناطق والزبائن والزيارات والمعالم الحالية بالبيانات الجديدة.
+              سيستبدل هذا الإجراء كل المناطق والمضلعات والزبائن والزيارات والمعالم الحالية بالبيانات الجديدة.
             </p>
             <div className="btn-row">
               <button className="btn btn-primary" onClick={onConfirm} disabled={busy}>

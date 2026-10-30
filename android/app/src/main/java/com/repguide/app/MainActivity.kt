@@ -28,6 +28,7 @@ import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.repguide.app.api.ApiClient
 import com.repguide.app.data.LandmarkEntity
+import com.repguide.app.data.PolygonEntity
 import com.repguide.app.data.RegionEntity
 import com.repguide.app.data.StoreEntity
 import com.repguide.app.databinding.ActivityMainBinding
@@ -98,11 +99,13 @@ class MainActivity : AppCompatActivity() {
 
     private var regions: List<RegionEntity> = emptyList()
     private var regionsById: Map<Int, RegionEntity> = emptyMap()
+    private var polygons: List<PolygonEntity> = emptyList()
     private var stores: List<StoreEntity> = emptyList()
     private var landmarks: List<LandmarkEntity> = emptyList()
     private var landmarksVisible = false
     private var selectedRegionId: Int? = null
     private var renderedRegions: List<RegionEntity>? = null
+    private var renderedPolygons: List<PolygonEntity>? = null
     private var routeLine: Polyline? = null
     private var routeOutline: Polyline? = null
     private var visibleStoreIds: Set<Int>? = null
@@ -244,7 +247,7 @@ class MainActivity : AppCompatActivity() {
                         getString(R.string.user_welcome, Prefs.userName(this@MainActivity).orEmpty()) +
                                 " — " + getString(R.string.stores_count, state.stores.size)
                     }
-                    onDataChanged(state.regions, state.stores, state.landmarks)
+                    onDataChanged(state.regions, state.polygons, state.stores, state.landmarks)
                 }
             }
         }
@@ -253,17 +256,27 @@ class MainActivity : AppCompatActivity() {
         vm.refreshPermissions()
     }
 
-    private fun onDataChanged(newRegions: List<RegionEntity>, newStores: List<StoreEntity>, newLandmarks: List<LandmarkEntity>) {
+    private fun onDataChanged(
+        newRegions: List<RegionEntity>,
+        newPolygons: List<PolygonEntity>,
+        newStores: List<StoreEntity>,
+        newLandmarks: List<LandmarkEntity>
+    ) {
         val regionsChanged = newRegions !== regions
         val landmarksChanged = newLandmarks !== landmarks
         regions = newRegions
         regionsById = newRegions.associateBy { it.id }
+        polygons = newPolygons
         stores = newStores
         landmarks = newLandmarks
         if (regionsChanged && renderedRegions !== newRegions) {
             renderedRegions = newRegions
-            buildRegionOverlays()
             rebuildSpinner()
+        }
+        // المضلعات مرئية فقط — طبقة الرسم والتسميات تُبنى منها وليس من المناطق
+        if (renderedPolygons !== newPolygons) {
+            renderedPolygons = newPolygons
+            buildPolygonOverlays()
         }
         if (landmarksChanged && landmarksVisible) buildLandmarkOverlay()
         applyFilters()
@@ -296,8 +309,8 @@ class MainActivity : AppCompatActivity() {
         binding.map.invalidate()
     }
 
-    private fun regionColor(region: RegionEntity, index: Int): Int {
-        region.color?.let {
+    private fun polygonColor(polygon: PolygonEntity, index: Int): Int {
+        polygon.color?.let {
             runCatching { return Color.parseColor(it) }
         }
         return PALETTE[index % PALETTE.size]
@@ -314,25 +327,26 @@ class MainActivity : AppCompatActivity() {
         }.getOrDefault(emptyList())
     }
 
-    private fun buildRegionOverlays() {
+    /** طبقتا المضلعات والتسميات تُبنيان من polygons — مرئية فقط ولا تؤثر على الفلترة */
+    private fun buildPolygonOverlays() {
         regionOverlay.items.clear()
         labelOverlay.items.clear()
-        regions.forEachIndexed { index, region ->
-            val color = regionColor(region, index)
-            val points = polygonPoints(region.polygonJson)
+        polygons.forEachIndexed { index, polygonEntity ->
+            val color = polygonColor(polygonEntity, index)
+            val points = polygonPoints(polygonEntity.polygonJson)
             if (points.size >= 3) {
                 val polygon = Polygon(binding.map)
                 polygon.points = points
                 polygon.fillPaint.color = color and 0x00FFFFFF or 0x3F000000
                 polygon.outlinePaint.color = color
                 polygon.outlinePaint.strokeWidth = 4f
-                polygon.title = region.name
+                polygon.title = polygonEntity.name
                 regionOverlay.add(polygon)
             }
-            if (region.labelLat != null && region.labelLng != null) {
+            if (polygonEntity.labelLat != null && polygonEntity.labelLng != null) {
                 val label = Marker(binding.map)
-                label.position = GeoPoint(region.labelLat, region.labelLng)
-                label.setTextIcon(region.name)
+                label.position = GeoPoint(polygonEntity.labelLat, polygonEntity.labelLng)
+                label.setTextIcon(polygonEntity.name)
                 label.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                 label.setOnMarkerClickListener { _, _ -> true }
                 labelOverlay.add(label)
@@ -379,19 +393,28 @@ class MainActivity : AppCompatActivity() {
         binding.regionStoresButton.visibility = View.VISIBLE
     }
 
+    /** المناطق بلا هندسة — التكبير على الصندوق المحيط بمحلاتها المرئية ذات الإحداثيات */
     private fun zoomToRegion(regionId: Int) {
-        val region = regionsById[regionId] ?: return
-        val points = polygonPoints(region.polygonJson)
-        if (points.isEmpty()) return
+        val ids = visibleStoreIds
+        val regionStores = stores.filter {
+            it.regionId == regionId && it.lat != null && it.lng != null &&
+                    (ids == null || it.id in ids)
+        }
+        if (regionStores.isEmpty()) {
+            Toast.makeText(this, R.string.region_no_visible_stores, Toast.LENGTH_SHORT).show()
+            return
+        }
         var minLat = 90.0
         var maxLat = -90.0
         var minLng = 180.0
         var maxLng = -180.0
-        for (p in points) {
-            minLat = minOf(minLat, p.latitude)
-            maxLat = maxOf(maxLat, p.latitude)
-            minLng = minOf(minLng, p.longitude)
-            maxLng = maxOf(maxLng, p.longitude)
+        for (store in regionStores) {
+            val lat = store.lat!!
+            val lng = store.lng!!
+            minLat = minOf(minLat, lat)
+            maxLat = maxOf(maxLat, lat)
+            minLng = minOf(minLng, lng)
+            maxLng = maxOf(maxLng, lng)
         }
         binding.map.post {
             binding.map.zoomToBoundingBox(
