@@ -441,6 +441,7 @@ adminRouter.get('/submissions', (req, res) => {
   const archived = req.query.archived === '1' ? 1 : 0;
   const rows = db
     .prepare(`SELECT s.id, s.store_name AS name, s.lat, s.lng, s.created_at AS createdAt,
+              s.action_at AS actionAt,
               u.name AS userName
               FROM store_submissions s JOIN users u ON u.id = s.user_id
               WHERE s.archived = ? ORDER BY s.created_at DESC`)
@@ -474,6 +475,7 @@ adminRouter.get('/updates', (req, res) => {
               st.code AS storeCode,
               s.new_lat AS newLat, s.new_lng AS newLng, s.note,
               s.new_name AS newName, s.cancel,
+              s.action_at AS actionAt,
               s.created_at AS createdAt,
               u.name AS userName
               FROM store_updates s JOIN users u ON u.id = s.user_id

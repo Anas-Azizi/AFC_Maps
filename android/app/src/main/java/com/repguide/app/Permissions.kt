@@ -25,7 +25,8 @@ data class Permissions(
     val canRename: Boolean = true,
     val canAddStore: Boolean = true,
     val showServerAddress: Boolean = true,
-    val canDownloadMaps: Boolean = true
+    val canDownloadMaps: Boolean = true,
+    val forceRealGps: Boolean = true
 ) {
     fun toJson(): JSONObject {
         val json = JSONObject()
@@ -51,6 +52,7 @@ data class Permissions(
         json.put("canAddStore", canAddStore)
         json.put("showServerAddress", showServerAddress)
         json.put("canDownloadMaps", canDownloadMaps)
+        json.put("forceRealGps", forceRealGps)
         return json
     }
 
@@ -79,7 +81,8 @@ data class Permissions(
                 canRename = json.optBoolean("canRename", true),
                 canAddStore = json.optBoolean("canAddStore", true),
                 showServerAddress = json.optBoolean("showServerAddress", true),
-                canDownloadMaps = json.optBoolean("canDownloadMaps", true)
+                canDownloadMaps = json.optBoolean("canDownloadMaps", true),
+                forceRealGps = json.optBoolean("forceRealGps", true)
             )
         }
     }

@@ -212,7 +212,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     withContext(Dispatchers.IO) {
                         ApiClient.submitStore(
                             Prefs.serverUrl(ctx), token, name, lat, lng,
-                            ctx.getString(R.string.error_unknown)
+                            ctx.getString(R.string.error_unknown), entity.createdAt
                         )
                     }
                 } catch (e: ApiClient.ApiException) {
@@ -246,7 +246,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 ApiClient.submitStore(
                     Prefs.serverUrl(ctx), token, p.name, p.lat, p.lng,
-                    ctx.getString(R.string.error_unknown)
+                    ctx.getString(R.string.error_unknown), p.createdAt
                 )
                 dao.deletePendingSubmission(p.id)
             } catch (e: ApiClient.ApiException) {
@@ -262,7 +262,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 ApiClient.submitStoreUpdate(
                     Prefs.serverUrl(ctx), token, u.storeId, u.storeName, u.lat, u.lng, u.note,
-                    ctx.getString(R.string.error_unknown), u.newName, u.cancel
+                    ctx.getString(R.string.error_unknown), u.newName, u.cancel, u.createdAt
                 )
                 dao.deletePendingUpdate(u.id)
             } catch (e: ApiClient.ApiException) {
@@ -298,7 +298,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     withContext(Dispatchers.IO) {
                         ApiClient.submitStoreUpdate(
                             Prefs.serverUrl(ctx), token, store.id, store.name, lat, lng, note,
-                            ctx.getString(R.string.error_unknown), newName, cancel
+                            ctx.getString(R.string.error_unknown), newName, cancel, entity.createdAt
                         )
                     }
                 } catch (e: ApiClient.ApiException) {

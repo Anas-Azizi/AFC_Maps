@@ -19,6 +19,7 @@ export const DEFAULT_PERMISSIONS = {
   canUpdateLocation: true,
   canUpdateBoth: true,
   canRename: true,
+  forceRealGps: true,
   canAddStore: true,
   showServerAddress: true,
   canDownloadMaps: true,

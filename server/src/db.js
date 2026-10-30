@@ -153,6 +153,17 @@ db.exec('CREATE INDEX IF NOT EXISTS idx_stores_code ON stores(code)');
   if (scols.length && !scols.some((c) => c.name === 'cancel')) {
     db.exec('ALTER TABLE store_updates ADD COLUMN cancel INTEGER NOT NULL DEFAULT 0');
   }
+  if (scols.length && !scols.some((c) => c.name === 'action_at')) {
+    db.exec('ALTER TABLE store_updates ADD COLUMN action_at TEXT');
+  }
+}
+
+// وقت تنفيذ الإجراء على جهاز المندوب (قد يسبق وقت المزامنة عند العمل أوفلاين)
+{
+  const bcols = db.prepare('PRAGMA table_info(store_submissions)').all();
+  if (bcols.length && !bcols.some((c) => c.name === 'action_at')) {
+    db.exec('ALTER TABLE store_submissions ADD COLUMN action_at TEXT');
+  }
 }
 
 export function getDataVersion() {

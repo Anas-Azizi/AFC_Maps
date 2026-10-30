@@ -38,6 +38,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.osmdroid.config.Configuration
+import org.osmdroid.events.MapListener
+import org.osmdroid.events.ScrollEvent
+import org.osmdroid.events.ZoomEvent
 import org.osmdroid.tileprovider.MapTileProviderArray
 import org.osmdroid.tileprovider.MapTileProviderBasic
 import org.osmdroid.tileprovider.modules.DatabaseFileArchive
@@ -110,7 +113,8 @@ class MainActivity : AppCompatActivity() {
     private var pinsHidden = false
     private var regionSheetOpen = false
     private var gpsConfirmMarker: Marker? = null
-    private var gpsConfirmAction: (() -> Unit)? = null
+    private var gpsConfirmAction: ((GeoPoint) -> Unit)? = null
+    private var gpsManualListener: MapListener? = null
     private lateinit var suggestionAdapter: StoreListAdapter
 
     private val locationPermissionLauncher =
@@ -204,10 +208,12 @@ class MainActivity : AppCompatActivity() {
 
         binding.gpsConfirmOk.setOnClickListener {
             binding.gpsConfirmBar.visibility = View.GONE
+            // النقطة النهائية: موضع الدبوس — في الوضع اليدوي يتبع مركز الخريطة
+            val point = gpsConfirmMarker?.position
             clearGpsConfirmMarker()
             val action = gpsConfirmAction
             gpsConfirmAction = null
-            action?.invoke()
+            if (point != null) action?.invoke(point)
         }
         binding.gpsConfirmCancel.setOnClickListener {
             binding.gpsConfirmBar.visibility = View.GONE
@@ -633,8 +639,8 @@ class MainActivity : AppCompatActivity() {
                         loc.latitude,
                         loc.longitude
                     )
-                ) {
-                    vm.submitStoreUpdate(store, loc.latitude, loc.longitude, null)
+                ) { point ->
+                    vm.submitStoreUpdate(store, point.latitude, point.longitude, null)
                 }
             }
             StoreDetailSheet.ACTION_ADD_NOTE -> showNoteDialog(store, null)
@@ -753,24 +759,53 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun clearGpsConfirmMarker() {
+        gpsManualListener?.let { binding.map.removeMapListener(it) }
+        gpsManualListener = null
         gpsConfirmMarker?.let { binding.map.overlays.remove(it) }
         gpsConfirmMarker = null
         binding.gpsConfirmBar.visibility = View.GONE
         binding.map.invalidate()
     }
 
+    /** الوضع اليدوي: الدبوس المؤقت يتبع مركز الخريطة أثناء تحريكها */
+    private fun followMapCenterWithMarker() {
+        val marker = gpsConfirmMarker ?: return
+        val center = binding.map.mapCenter
+        marker.position = GeoPoint(center.latitude, center.longitude)
+        binding.map.invalidate()
+    }
+
     /**
      * تأكيد موقع GPS: تكبير الخريطة على النقطة مع دبوس مؤقت ثم شريط تأكيد
      * أسفل الشاشة (غير حاجب للخريطة) يعرض دقة GPS عند توفرها.
+     * عند تعطيل forceRealGps يمكن للمستخدم تظبيط الموقع بتحريك الخريطة —
+     * يتبع الدبوس مركزها وتُرسَل نقطة المركز النهائية عند التأكيد.
      * عند الإلغاء يُزال الدبوس ولا يُرسل شيء.
      */
-    private fun confirmGpsPoint(point: GeoPoint, message: String, onConfirm: () -> Unit) {
+    private fun confirmGpsPoint(point: GeoPoint, message: String, onConfirm: (GeoPoint) -> Unit) {
         showGpsConfirmMarker(point)
+        val manual = !Prefs.permissions(this).forceRealGps
         val accuracy = myLocationOverlay.lastFix?.takeIf { it.hasAccuracy() }?.accuracy
         val accuracyText = accuracy?.let { "\n" + getString(R.string.gps_accuracy, it.toInt()) }.orEmpty()
+        val manualHint = if (manual) "\n" + getString(R.string.gps_manual_hint) else ""
         gpsConfirmAction = onConfirm
         binding.gpsConfirmText.text =
-            getString(R.string.confirm_location_title) + "\n" + message + accuracyText
+            getString(R.string.confirm_location_title) + "\n" + message + accuracyText + manualHint
+        if (manual) {
+            val listener = object : MapListener {
+                override fun onScroll(event: ScrollEvent): Boolean {
+                    followMapCenterWithMarker()
+                    return true
+                }
+
+                override fun onZoom(event: ZoomEvent): Boolean {
+                    followMapCenterWithMarker()
+                    return true
+                }
+            }
+            gpsManualListener = listener
+            binding.map.addMapListener(listener)
+        }
         binding.gpsConfirmBar.visibility = View.VISIBLE
     }
 
@@ -836,8 +871,8 @@ class MainActivity : AppCompatActivity() {
         confirmGpsPoint(
             location,
             getString(R.string.new_store_coords, location.latitude, location.longitude)
-        ) {
-            showNewStoreNameDialog(location)
+        ) { point ->
+            showNewStoreNameDialog(point)
         }
     }
 

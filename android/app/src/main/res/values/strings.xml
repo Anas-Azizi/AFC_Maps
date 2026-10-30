@@ -65,6 +65,7 @@
     <string name="back">رجوع</string>
     <string name="confirm_location_title">تأكيد الموقع</string>
     <string name="gps_accuracy">الدقة: ~%1$dم</string>
+    <string name="gps_manual_hint">حرّك الخريطة لتظبيط الموقع ثم أكّد</string>
     <string name="confirm_update_location">سيتم إرسال موقعك الحالي (%2$.5f، %3$.5f) كموقع مُقترح للمحل «%1$s»</string>
     <string name="note_dialog_title">ملاحظة عن «%1$s»</string>
     <string name="note_hint">اكتب الملاحظة…</string>

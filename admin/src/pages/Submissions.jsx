@@ -67,7 +67,8 @@ export default function Submissions() {
                 <th>Latitude</th>
                 <th>Longitude</th>
                 <th>المستخدم</th>
-                <th>التاريخ</th>
+                <th>تاريخ الإجراء</th>
+                <th>تاريخ المزامنة</th>
                 <th>إجراءات</th>
               </tr>
             </thead>
@@ -78,6 +79,7 @@ export default function Submissions() {
                   <td dir="ltr">{Number(r.lat).toFixed(6)}</td>
                   <td dir="ltr">{Number(r.lng).toFixed(6)}</td>
                   <td>{r.userName}</td>
+                  <td dir="ltr">{r.actionAt || '—'}</td>
                   <td dir="ltr">{r.createdAt}</td>
                   <td>
                     <button className="btn btn-secondary btn-small" onClick={() => toggleArchive(r)}>
@@ -88,7 +90,7 @@ export default function Submissions() {
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan="6" className="muted">
+                  <td colSpan="7" className="muted">
                     {showArchived ? 'لا توجد سجلات مؤرشفة' : 'لا توجد محلات مسجلة ميدانياً بعد'}
                   </td>
                 </tr>
@@ -107,7 +109,8 @@ export default function Submissions() {
                 <th>Longitude</th>
                 <th>الملاحظة</th>
                 <th>المستخدم</th>
-                <th>التاريخ</th>
+                <th>تاريخ الإجراء</th>
+                <th>تاريخ المزامنة</th>
                 <th>إجراءات</th>
               </tr>
             </thead>
@@ -128,6 +131,7 @@ export default function Submissions() {
                   <td dir="ltr">{r.newLng != null ? Number(r.newLng).toFixed(6) : '—'}</td>
                   <td>{r.note || '—'}</td>
                   <td>{r.userName}</td>
+                  <td dir="ltr">{r.actionAt || '—'}</td>
                   <td dir="ltr">{r.createdAt}</td>
                   <td>
                     <button className="btn btn-secondary btn-small" onClick={() => toggleArchive(r)}>
@@ -138,7 +142,7 @@ export default function Submissions() {
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan="10" className="muted">
+                  <td colSpan="12" className="muted">
                     {showArchived ? 'لا توجد سجلات مؤرشفة' : 'لا توجد تحديثات بعد'}
                   </td>
                 </tr>

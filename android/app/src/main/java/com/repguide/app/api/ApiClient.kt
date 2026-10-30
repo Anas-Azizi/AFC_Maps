@@ -90,18 +90,18 @@ object ApiClient {
         name: String,
         lat: Double,
         lng: Double,
-        unknownError: String
+        unknownError: String,
+        actionAt: Long? = null
     ) {
         val payload = JSONObject()
             .put("name", name)
             .put("lat", lat)
             .put("lng", lng)
-            .toString()
-            .toRequestBody("application/json; charset=utf-8".toMediaType())
+        actionAt?.let { payload.put("actionAt", it) }
         val request = Request.Builder()
             .url("$serverUrl/api/data/submissions")
             .header("Authorization", "Bearer $token")
-            .post(payload)
+            .post(payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
             .build()
         execute(request, unknownError)
     }
@@ -116,7 +116,8 @@ object ApiClient {
         note: String?,
         unknownError: String,
         newName: String? = null,
-        cancel: Boolean = false
+        cancel: Boolean = false,
+        actionAt: Long? = null
     ) {
         val payload = JSONObject()
             .put("storeName", storeName)
@@ -126,6 +127,7 @@ object ApiClient {
         note?.let { payload.put("note", it) }
         newName?.let { payload.put("newName", it) }
         if (cancel) payload.put("cancel", true)
+        actionAt?.let { payload.put("actionAt", it) }
         val request = Request.Builder()
             .url("$serverUrl/api/data/updates")
             .header("Authorization", "Bearer $token")
