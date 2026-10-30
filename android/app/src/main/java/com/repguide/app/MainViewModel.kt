@@ -110,11 +110,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val reps = effectiveReps(ctx)
             val days = Prefs.dayFilter(ctx)
             val data = withContext(Dispatchers.IO) {
-                val byReps = reps?.let { dao.storeIdsForReps(it).toSet() }
-                val byDays = days?.let { dao.storeIdsForDays(it).toSet() }
+                // عند تحديد مندوبين وأيام معاً: الزيارة نفسها يجب أن تطابق الشرطين
                 val ids = when {
-                    byReps != null && byDays != null -> byReps intersect byDays
-                    else -> byReps ?: byDays
+                    reps != null && days != null -> dao.storeIdsForRepsAndDays(reps, days).toSet()
+                    reps != null -> dao.storeIdsForReps(reps).toSet()
+                    days != null -> dao.storeIdsForDays(days).toSet()
+                    else -> null
                 }
                 Triple(ids, dao.allRepNames(), dao.allVisitDays())
             }
