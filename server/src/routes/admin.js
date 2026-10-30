@@ -170,14 +170,24 @@ function buildStoreFilters(query, a = 'stores.') {
   if (query.hasVisits === '1') where.push(`EXISTS (SELECT 1 FROM visits v WHERE v.store_id = ${a}id)`);
   if (query.hasVisits === '0') where.push(`NOT EXISTS (SELECT 1 FROM visits v WHERE v.store_id = ${a}id)`);
 
-  const multiVisit = (col, raw) => {
+  const multiVisit = (col, raw, alias = 'v') => {
     const vals = String(raw).split(',').filter(Boolean);
-    if (!vals.length) return;
-    where.push(`EXISTS (SELECT 1 FROM visits v WHERE v.store_id = ${a}id AND ${col} IN (${vals.map(() => '?').join(',')}))`);
-    params.push(...vals);
+    if (!vals.length) return null;
+    return { sql: `${alias}.${col} IN (${vals.map(() => '?').join(',')})`, params: vals };
   };
-  if (query.repName) multiVisit('v.rep_name', query.repName);
-  if (query.visitDay) multiVisit('v.visit_day', query.visitDay);
+  // عند تحديد مندوب ويوم معاً يجب أن يطابقا سجل الزيارة نفسه
+  const repF = query.repName ? multiVisit('rep_name', query.repName) : null;
+  const dayF = query.visitDay ? multiVisit('visit_day', query.visitDay) : null;
+  if (repF && dayF) {
+    where.push(`EXISTS (SELECT 1 FROM visits v WHERE v.store_id = ${a}id AND ${repF.sql} AND ${dayF.sql})`);
+    params.push(...repF.params, ...dayF.params);
+  } else if (repF) {
+    where.push(`EXISTS (SELECT 1 FROM visits v WHERE v.store_id = ${a}id AND ${repF.sql})`);
+    params.push(...repF.params);
+  } else if (dayF) {
+    where.push(`EXISTS (SELECT 1 FROM visits v WHERE v.store_id = ${a}id AND ${dayF.sql})`);
+    params.push(...dayF.params);
+  }
 
   return { whereSql: where.length ? ' WHERE ' + where.join(' AND ') : '', params };
 }
