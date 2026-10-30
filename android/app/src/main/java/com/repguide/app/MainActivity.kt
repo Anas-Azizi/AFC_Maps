@@ -110,6 +110,7 @@ class MainActivity : AppCompatActivity() {
     private var pinsHidden = false
     private var regionSheetOpen = false
     private var gpsConfirmMarker: Marker? = null
+    private var gpsConfirmAction: (() -> Unit)? = null
     private lateinit var suggestionAdapter: StoreListAdapter
 
     private val locationPermissionLauncher =
@@ -199,6 +200,19 @@ class MainActivity : AppCompatActivity() {
 
         binding.regionStoresButton.setOnClickListener {
             selectedRegionId?.let { showRegionStores(it) }
+        }
+
+        binding.gpsConfirmOk.setOnClickListener {
+            binding.gpsConfirmBar.visibility = View.GONE
+            clearGpsConfirmMarker()
+            val action = gpsConfirmAction
+            gpsConfirmAction = null
+            action?.invoke()
+        }
+        binding.gpsConfirmCancel.setOnClickListener {
+            binding.gpsConfirmBar.visibility = View.GONE
+            clearGpsConfirmMarker()
+            gpsConfirmAction = null
         }
 
         lifecycleScope.launch {
@@ -741,33 +755,28 @@ class MainActivity : AppCompatActivity() {
     private fun clearGpsConfirmMarker() {
         gpsConfirmMarker?.let { binding.map.overlays.remove(it) }
         gpsConfirmMarker = null
+        binding.gpsConfirmBar.visibility = View.GONE
         binding.map.invalidate()
     }
 
     /**
-     * تأكيد موقع GPS: تكبير الخريطة على النقطة مع دبوس مؤقت ثم حوار تأكيد
-     * يعرض دقة GPS عند توفرها. عند الإلغاء يُزال الدبوس ولا يُرسل شيء.
+     * تأكيد موقع GPS: تكبير الخريطة على النقطة مع دبوس مؤقت ثم شريط تأكيد
+     * أسفل الشاشة (غير حاجب للخريطة) يعرض دقة GPS عند توفرها.
+     * عند الإلغاء يُزال الدبوس ولا يُرسل شيء.
      */
     private fun confirmGpsPoint(point: GeoPoint, message: String, onConfirm: () -> Unit) {
         showGpsConfirmMarker(point)
         val accuracy = myLocationOverlay.lastFix?.takeIf { it.hasAccuracy() }?.accuracy
         val accuracyText = accuracy?.let { "\n" + getString(R.string.gps_accuracy, it.toInt()) }.orEmpty()
-        AlertDialog.Builder(this)
-            .setTitle(R.string.confirm_location_title)
-            .setMessage(message + accuracyText)
-            .setPositiveButton(R.string.confirm) { _, _ ->
-                clearGpsConfirmMarker()
-                onConfirm()
-            }
-            .setNegativeButton(R.string.cancel) { _, _ -> clearGpsConfirmMarker() }
-            .setOnCancelListener { clearGpsConfirmMarker() }
-            .show()
+        gpsConfirmAction = onConfirm
+        binding.gpsConfirmText.text =
+            getString(R.string.confirm_location_title) + "\n" + message + accuracyText
+        binding.gpsConfirmBar.visibility = View.VISIBLE
     }
 
     private fun showRenameDialog(store: StoreEntity) {
         val input = android.widget.EditText(this).apply {
-            setText(store.name)
-            setSelection(store.name.length)
+            hint = getString(R.string.new_store_name_hint)
         }
         val pad = (24 * resources.displayMetrics.density).toInt()
         val container = FrameLayout(this).apply {
