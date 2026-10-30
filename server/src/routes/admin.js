@@ -458,6 +458,15 @@ adminRouter.post('/submissions/:id/archive', (req, res) => {
 
 // ---------- تحديثات المحلات المقترحة ----------
 
+// بيانات قديمة تحوي الكود مدمجاً في الاسم — نزيله ليعرض في عمود الكود فقط
+function stripEmbeddedCode(name) {
+  if (!name) return name;
+  const m = /\d{3,}/.exec(name);
+  if (!m) return name;
+  const clean = name.replace(m[0], '').trim();
+  return clean || name;
+}
+
 adminRouter.get('/updates', (req, res) => {
   const archived = req.query.archived === '1' ? 1 : 0;
   const rows = db
@@ -470,7 +479,8 @@ adminRouter.get('/updates', (req, res) => {
               FROM store_updates s JOIN users u ON u.id = s.user_id
               LEFT JOIN stores st ON st.id = s.store_id
               WHERE s.archived = ? ORDER BY s.created_at DESC`)
-    .all(archived);
+    .all(archived)
+    .map((r) => ({ ...r, storeName: stripEmbeddedCode(r.storeName) }));
   res.json(rows);
 });
 
